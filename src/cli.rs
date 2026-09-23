@@ -25,6 +25,8 @@ pub enum Cmd {
         #[arg(long)]
         path: Option<PathBuf>,
     },
+    /// 打印当前 user_id 与其命中级（§4.5 四级解析诊断）
+    Whoami,
     /// 显示 project 的归属 store 与磁盘路径
     Where {
         /// 全量 project_id，如 codeup:iptv/android/v4

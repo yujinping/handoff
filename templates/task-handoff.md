@@ -2,8 +2,10 @@
 - project_id: <host_alias>:<ns>/<repo>     # 由 handoff id 派生，勿手改
 - scope: <可选：monorepo 模块，如 v4-core>
 - remote: <git remote url>
-- status: in-progress | blocked | done
-- updated: YYYY-MM-DD HH:mm  by: <host>
+- status: in-progress                       # in-progress | blocked | done
+- owner: <owner>                            # 须等于所在 users/<user_id> 目录名（§4.5）
+- host: <host>                              # 最后写入的机器（多机冲突归因）
+- updated: YYYY-MM-DD HH:mm                 # 最后写入时间
 - goal: 一句话目标
 - current: 已完成到什么程度
 - decisions: 已定决策 + 理由（避免重复讨论）

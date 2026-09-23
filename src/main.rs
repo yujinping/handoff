@@ -35,6 +35,7 @@ fn run() -> Result<()> {
     let cfg = Config::load();
     match args.cmd {
         Cmd::Id { path } => cmd_id(&cfg, path),
+        Cmd::Whoami => cmd_whoami(&cfg),
         Cmd::Where { project_id } => cmd_where(&cfg, &project_id),
         Cmd::New { target, scope } => cmd_new(&cfg, &target, scope.as_deref()),
         Cmd::Show { target } => cmd_show(&cfg, &target),
@@ -82,12 +83,43 @@ fn cmd_id(cfg: &Config, path: Option<PathBuf>) -> Result<()> {
     let pid = id::derive_from_dir(&dir, cfg)?;
     let store_name = pid.store(cfg);
     println!("project_id: {}", pid.as_str());
+    println!("user_id:    {}", cfg.user);
     println!("store:      {store_name}");
     println!(
         "remote:     {}",
         repo::remote_url(&dir).unwrap_or_else(|| "(none)".to_string())
     );
-    println!("repo_root:  {}", store::store_dir(&cfg.root, &store_name).display());
+    println!("store_root: {}", store::store_dir(&cfg.root, &store_name).display());
+    println!(
+        "tasks_dir:  {}",
+        store::tasks_dir(&cfg.root, &store_name, &cfg.user).display()
+    );
+    Ok(())
+}
+
+/// 打印当前 user_id 与命中级（§4.5 四级解析诊断），并列出各 store 的命名空间路径。
+fn cmd_whoami(cfg: &Config) -> Result<()> {
+    println!("user_id: {}", cfg.user);
+    println!("source:  {}", cfg.user_source.as_str());
+    for s in cfg.stores() {
+        println!("  [{s}]");
+        println!(
+            "    namespace: {}",
+            store::user_dir(&cfg.root, &s, &cfg.user).display()
+        );
+        println!(
+            "    tasks:     {}",
+            store::tasks_dir(&cfg.root, &s, &cfg.user).display()
+        );
+        println!(
+            "    sessions:  {}",
+            store::sessions_dir(&cfg.root, &s, &cfg.user).display()
+        );
+        println!(
+            "    archive:   {}",
+            store::archive_dir(&cfg.root, &s, &cfg.user).display()
+        );
+    }
     Ok(())
 }
 
@@ -95,6 +127,7 @@ fn cmd_where(cfg: &Config, project_id: &str) -> Result<()> {
     let pid = id::parse_project_id(project_id)?;
     let store_name = pid.store(cfg);
     println!("project_id: {}", pid.as_str());
+    println!("user_id:    {}", cfg.user);
     println!("store:      {store_name}");
     println!("tasks_dir:  {}", store::project_dir(&cfg.root, cfg, &pid).display());
     Ok(())
@@ -114,7 +147,7 @@ fn cmd_new(cfg: &Config, target: &str, scope: Option<&str>) -> Result<()> {
         .unwrap_or_default();
     let tpl = template::load_template(&cfg.root, &store_name)
         .unwrap_or_else(|| template::DEFAULT_TEMPLATE.to_string());
-    let content = template::render(&tpl, &pid, &slug, &remote, scope);
+    let content = template::render(&tpl, &pid, &slug, &remote, scope, &cfg.user);
 
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
@@ -124,6 +157,7 @@ fn cmd_new(cfg: &Config, target: &str, scope: Option<&str>) -> Result<()> {
 
     println!("created:    {}", path.display());
     println!("project_id: {}", pid.as_str());
+    println!("owner:      {}", cfg.user);
     println!("store:      {store_name}");
     Ok(())
 }
@@ -140,7 +174,10 @@ fn cmd_show(cfg: &Config, target: &str) -> Result<()> {
 fn cmd_list(cfg: &Config, open: bool, filter: Option<&str>) -> Result<()> {
     for store_name in target_stores(cfg, filter) {
         let mut files = Vec::new();
-        scan::walk_md(&store::tasks_dir(&cfg.root, &store_name), &mut files);
+        scan::walk_md(
+            &store::tasks_dir(&cfg.root, &store_name, &cfg.user),
+            &mut files,
+        );
         files.sort();
         for f in files {
             let Ok(content) = std::fs::read_to_string(&f) else {
@@ -165,9 +202,21 @@ fn cmd_save(cfg: &Config, target: &str, message: &str) -> Result<()> {
     let content =
         std::fs::read_to_string(&path).with_context(|| format!("读取失败：{}", path.display()))?;
 
-    // 归属校验：跨信任域写入阻断（§11）
+    // ① 信任域归属校验：跨信任域写入阻断（§11）
     scan::check_trust_domain(&content, cfg, &store_name, &path)?;
-    // 敏感信息阻断
+
+    // ② owner 归属校验：与**文件实际所在**命名空间比对（§4.5 Q10=A）。
+    //    以目录为准、不采信文档自称，故此处反推目录名而非取 cfg.user。
+    let owner_of_dir = store::owner_of_path(&cfg.root, &store_name, &path).with_context(|| {
+        format!(
+            "{} 不在 `users/<user_id>/` 命名空间下；请先迁移到 users/{}/（§4.5）",
+            path.display(),
+            cfg.user
+        )
+    })?;
+    scan::check_owner(&content, &owner_of_dir, &path)?;
+
+    // ③ 敏感信息阻断
     let secrets = scan::secret_hits(&content);
     if !secrets.is_empty() {
         bail!("文档命中敏感信息，已阻断推送：{}", secrets.join(", "));

@@ -42,7 +42,9 @@ allowed-tools: Bash,Read,Write,Edit,Grep,Glob,AskUserQuestion
 **A3. 填充字段**（按模板逐项；缺失项写 `none` 而非删除该行）
 
 - `status`：`in-progress` | `blocked` | `done`
-- `updated`：用命令取时间，**不要手写**：`date "+%Y-%m-%d %H:%M"`；`by:` 用 `hostname -s`
+- `owner`：**必须等于文档所在 `users/<user_id>/` 的目录名**（`handoff whoami` 查当前值）。这是归属校验字段，写错会被 `scan`/`save` 阻断
+- `host`：最后写入的机器，用 `hostname -s` 取值
+- `updated`：用命令取时间，**不要手写**：`date "+%Y-%m-%d %H:%M"`
 - `goal`：一句话目标
 - `current`：已完成到什么程度（叙述式，便于他人接手）
 - `decisions`：已定决策 **+ 理由**（避免接手者重复讨论）
@@ -88,6 +90,8 @@ allowed-tools: Bash,Read,Write,Edit,Grep,Glob,AskUserQuestion
 | `sync` 出现 rebase 冲突 | **不要** `git push --force`。保留差异，将冲突点写入文档 `open:`（附两端内容摘要），提示用户人工确认后重试 |
 | 同一 slug 被多机并行编辑 | 提示用户按主机拆分（slug 加 `-<host>` 后缀）或串行操作；不要静默覆盖 |
 | `scan` 报跨信任域 | 文档写入的 store 与其 `project_id` 归属不一致 → 移动到正确 store，不要改 `project_id` 就范 |
+| `scan`/`save` 报 owner 归属违规 | 文档 `owner` 与所在 `users/<user_id>/` 不符 → 二选一：把 `owner` 改成与目录一致，或把文件移到自己的命名空间。**不要**为了过校验随意改 `owner` |
+| `save` 报「不在 `users/<user_id>/` 命名空间下」 | 文档仍在旧扁平布局 → 迁移到 `users/<user_id>/tasks/...` 后重试 |
 | `scan` 报敏感信息 | 删除对应内容后重试；**不得** `--no-verify` 或绕过 |
 | `handoff` 命令缺失 | 终止并告知安装方式，不要用裸 `git` 手工模拟流程 |
 
@@ -95,21 +99,23 @@ allowed-tools: Bash,Read,Write,Edit,Grep,Glob,AskUserQuestion
 
 1. **禁止**在交接文档写入 token / 密钥 / 口令 / 私钥 / 带凭据的连接串。`scan` 会阻断，但应先自查。
 2. **信任域物理隔离**：公司项目（`work`）文档只能落在 work store；个人项目只能落在 personal store。跨域即信息外泄。
-3. **不强制推送**：任何情况下不用 `--force` / `--force-with-lease`。
-4. 不确定归属时，先 `handoff where <project_id>` 查清落点再写。
+3. **用户命名空间**：只写自己 `users/<user_id>/` 下的文档，`owner` 必须与目录名一致。注意同一仓库内多用户**无读隔离**——命名空间防的是误写，不是保密手段。
+4. **不强制推送**：任何情况下不用 `--force` / `--force-with-lease`。
+5. 不确定归属时，先 `handoff where <project_id>` 查清落点再写。
 
 ## 命令速查
 
 | 命令 | 用途 |
 |---|---|
-| `handoff id` | 派生当前目录的 project_id + store |
+| `handoff id` | 派生当前目录的 project_id + user_id + store |
+| `handoff whoami` | 查看当前 user_id 与其命中级 |
 | `handoff where <id>` | 查 project 的归属 store 与磁盘路径 |
 | `handoff new <id>/<slug>` | 从模板建任务文档 |
 | `handoff show <id>/<slug>` | 打印文档（注入上下文） |
 | `handoff list --open` | 列出未完成任务 |
 | `handoff save <id>/<slug> -m "…"` | 校验 + 提交 + 推送 |
 | `handoff sync` | pull --rebase && push |
-| `handoff scan` | 敏感信息 + 信任域扫描 |
+| `handoff scan` | 敏感信息 + 信任域 + owner 扫描 |
 
 ## 说明
 

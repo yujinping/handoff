@@ -1,0 +1,5 @@
+# 跨平台行尾统一（计划 §0.4）
+# Git for Windows 默认 core.autocrlf=true，会把 markdown 检出为 CRLF →
+# 跨机 diff 整篇变化，污染「按需注入」与冲突解决。故强制 LF。
+* text=auto
+*.md text eol=lf

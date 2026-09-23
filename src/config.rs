@@ -9,6 +9,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
+use std::process::Command;
 
 /// 默认 store 根（相对 home）。
 pub const DEFAULT_REL_ROOT: &str = "data/workspace/personal-open-source/ai-handoff";
@@ -29,11 +30,46 @@ pub const DEFAULT_STORE_OF: &[(&str, &str)] = &[
     ("local", "personal"),
 ];
 
+/// user_id 全链失效时的兜底常量（§4.5：**绝不产出空路径段**）。
+pub const FALLBACK_USER: &str = "user";
+
+/// user_id 命中级（供 `handoff whoami` 诊断，§4.5）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UserSource {
+    /// 1) 环境变量 `HANDOFF_USER`（临时 / CI，最高优先）
+    Env,
+    /// 2) `~/.config/handoff/config.toml` 顶层 `user`
+    ConfigFile,
+    /// 3) `git config --global user.name`
+    GitGlobal,
+    /// 4) `whoami`
+    System,
+    /// 全链失败 → 兜底常量
+    Fallback,
+}
+
+impl UserSource {
+    /// 展示名。
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            UserSource::Env => "env:HANDOFF_USER",
+            UserSource::ConfigFile => "config:user",
+            UserSource::GitGlobal => "git:user.name",
+            UserSource::System => "whoami",
+            UserSource::Fallback => "fallback",
+        }
+    }
+}
+
 /// 运行期配置。
 #[derive(Debug, Clone)]
 pub struct Config {
     /// store 根容器目录（其下为 work/ personal/ 等独立仓库）。
     pub root: PathBuf,
+    /// 当前 user_id（`users/<user_id>/` 命名空间，§4.5）。
+    pub user: String,
+    /// user_id 的命中级（诊断用）。
+    pub user_source: UserSource,
     /// host_alias → store 归属（可由本机 config.toml 覆盖）。
     pub host_alias_store: HashMap<String, String>,
     /// remote url → project_id（仅本机有效，优先于派生）。
@@ -58,14 +94,89 @@ pub fn expand_tilde(s: &str) -> PathBuf {
     }
 }
 
+/// user_id 可用性判定：sanitize（小写 + `[^a-z0-9._-]`→`-`）后须
+/// **含至少一个 ASCII 字母数字、且不以 `.` 开头**，否则视为无效。
+/// 这条规则挡住了中文 `user.name`（如「于金平」→ 全是 `-`）与空值。
+pub fn usable_user(raw: &str) -> Option<String> {
+    let s = crate::id::sanitize_seg(raw.trim());
+    if s.is_empty() || s.starts_with('.') {
+        return None;
+    }
+    if !s.chars().any(|c| c.is_ascii_alphanumeric()) {
+        return None;
+    }
+    Some(s)
+}
+
+/// `git config --global user.name`。
+/// **必须强制 `--global`**：否则在 store 目录内执行会读到仓库级配置，结果随所在目录变化。
+fn git_global_user_name() -> Option<String> {
+    let out = Command::new("git")
+        .args(["config", "--global", "user.name"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (!s.is_empty()).then_some(s)
+}
+
+/// `whoami`（系统兜底）。
+fn whoami_user() -> Option<String> {
+    let out = Command::new("whoami").output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (!s.is_empty()).then_some(s)
+}
+
+/// 四级解析核心（Q8=A，§4.5）。git/whoami 取值器以闭包注入，便于单测且保证惰性：
+/// 前级命中即**不 spawn 进程**。
+pub fn resolve_user_with(
+    env_user: Option<&str>,
+    file_user: Option<&str>,
+    git_fn: impl FnOnce() -> Option<String>,
+    sys_fn: impl FnOnce() -> Option<String>,
+) -> (String, UserSource) {
+    if let Some(v) = env_user.and_then(usable_user) {
+        return (v, UserSource::Env);
+    }
+    if let Some(v) = file_user.and_then(usable_user) {
+        return (v, UserSource::ConfigFile);
+    }
+    if let Some(v) = git_fn().and_then(|s| usable_user(&s)) {
+        return (v, UserSource::GitGlobal);
+    }
+    if let Some(v) = sys_fn().and_then(|s| usable_user(&s)) {
+        return (v, UserSource::System);
+    }
+    (FALLBACK_USER.to_string(), UserSource::Fallback)
+}
+
+/// 运行期入口：`HANDOFF_USER` → config.toml `user` → `git config --global user.name` → `whoami`。
+pub fn resolve_user(file_user: Option<&str>) -> (String, UserSource) {
+    let env = std::env::var("HANDOFF_USER").ok();
+    resolve_user_with(
+        env.as_deref(),
+        file_user,
+        git_global_user_name,
+        whoami_user,
+    )
+}
+
 impl Default for Config {
     fn default() -> Self {
         let host_alias_store = DEFAULT_STORE_OF
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
+        let (user, user_source) = resolve_user(None);
         Config {
             root: home_dir().join(DEFAULT_REL_ROOT),
+            user,
+            user_source,
             host_alias_store,
             local_override: HashMap::new(),
         }
@@ -79,6 +190,7 @@ impl Config {
     }
 
     /// 加载配置（env > 文件 > 默认），任何解析失败都不致命，回退默认。
+    /// user_id 走完整四级解析：顶层 `user` 作为第 2 级输入（env 仍高于它）。
     pub fn load() -> Config {
         let mut cfg = Config::default();
 
@@ -86,11 +198,20 @@ impl Config {
             cfg.root = expand_tilde(&root.to_string_lossy());
         }
 
+        let mut file_user: Option<String> = None;
         if let Ok(text) = std::fs::read_to_string(Self::config_file()) {
             if let Ok(value) = toml::from_str::<toml::Value>(&text) {
+                file_user = value
+                    .get("user")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
                 cfg.apply(&value);
             }
         }
+
+        let (user, user_source) = resolve_user(file_user.as_deref());
+        cfg.user = user;
+        cfg.user_source = user_source;
         cfg
     }
 
@@ -192,5 +313,99 @@ mod tests {
         let p = expand_tilde("~/a/b");
         assert!(p.ends_with("a/b"));
         assert!(!p.to_string_lossy().starts_with('~'));
+    }
+
+    #[test]
+    fn usable_user_rejects_invalid() {
+        assert_eq!(usable_user("yujinping").as_deref(), Some("yujinping"));
+        assert_eq!(usable_user("Yujin Ping").as_deref(), Some("yujin-ping"));
+        assert_eq!(usable_user("a.b_c-d").as_deref(), Some("a.b_c-d"));
+        // 中文 → sanitize 后全是 `-` → 无效（§4.5 的关键边界）
+        assert_eq!(usable_user("于金平"), None);
+        assert_eq!(usable_user(""), None);
+        assert_eq!(usable_user("---"), None);
+        // 不以 `.` 开头（避免生成隐藏目录）
+        assert_eq!(usable_user(".hidden"), None);
+    }
+
+    #[test]
+    fn user_fallback_chain_order() {
+        assert_eq!(
+            resolve_user_with(
+                Some("alice"),
+                Some("bob"),
+                || Some("carol".to_string()),
+                || Some("dave".to_string())
+            ),
+            ("alice".to_string(), UserSource::Env)
+        );
+        assert_eq!(
+            resolve_user_with(
+                None,
+                Some("bob"),
+                || Some("carol".to_string()),
+                || Some("dave".to_string())
+            ),
+            ("bob".to_string(), UserSource::ConfigFile)
+        );
+        assert_eq!(
+            resolve_user_with(
+                None,
+                None,
+                || Some("carol".to_string()),
+                || Some("dave".to_string())
+            ),
+            ("carol".to_string(), UserSource::GitGlobal)
+        );
+        assert_eq!(
+            resolve_user_with(None, None, || None, || Some("dave".to_string())),
+            ("dave".to_string(), UserSource::System)
+        );
+        assert_eq!(
+            resolve_user_with(None, None, || None, || None),
+            (FALLBACK_USER.to_string(), UserSource::Fallback)
+        );
+    }
+
+    #[test]
+    fn invalid_candidate_degrades_to_next_level() {
+        // 中文 git user.name → sanitize 后无效 → 降级到 whoami
+        assert_eq!(
+            resolve_user_with(
+                None,
+                None,
+                || Some("于金平".to_string()),
+                || Some("dave".to_string())
+            ),
+            ("dave".to_string(), UserSource::System)
+        );
+        // 空串同样降级
+        assert_eq!(
+            resolve_user_with(
+                Some(""),
+                Some(""),
+                || Some(String::new()),
+                || Some("dave".to_string())
+            ),
+            ("dave".to_string(), UserSource::System)
+        );
+    }
+
+    #[test]
+    fn user_is_never_empty() {
+        // 无论环境如何，user 必须非空且非隐藏名——否则路径会塌缩为 users//tasks
+        let cfg = Config::default();
+        assert!(!cfg.user.is_empty());
+        assert!(!cfg.user.starts_with('.'));
+    }
+
+    #[test]
+    fn top_level_user_key_is_read() {
+        let value: toml::Value = toml::from_str(r#"user = "alice""#).unwrap();
+        let file_user = value.get("user").and_then(|v| v.as_str());
+        assert_eq!(file_user, Some("alice"));
+        // 非字符串类型不应被误取
+        let bad: toml::Value = toml::from_str("user = 42").unwrap();
+        assert!(bad.get("user").and_then(|v| v.as_str()).is_none());
     }
 }

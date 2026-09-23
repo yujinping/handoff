@@ -1,17 +1,19 @@
-// Handoff / 交接 — 扫描与信任域归属校验
+// Handoff / 交接 — 扫描与归属校验
 //
 // @author yujinping
-// @design §11 安全：
-//   - 归属校验（关键）：文档 front-matter 的 project_id 归属 store 必须与文档所在 store 一致，
-//     不一致即视为跨信任域写入（如 `codeup:` 项目落入 personal store），save 时阻断。
-//   - 敏感信息扫描：保守关键字命中（私钥头、常见 token/secret 前缀），push 前拦截。
+// @design §11 安全 + §4.5 多用户。两道**正交**的归属校验：
+//   ① 信任域校验（跨 store）：front-matter 的 project_id 归属 store 必须与文档所在 store 一致，
+//      不一致即视为跨信任域写入（如 `codeup:` 项目落入 personal store），save 时阻断。
+//   ② owner 校验（同 store 内跨命名空间）：front-matter 的 owner 必须等于文档**实际所在**
+//      `users/<user_id>/` 目录名。目录为准、不采信自称——这正是要拦的情形。
+//   ③ 敏感信息扫描：保守关键字命中（私钥头、常见 token/secret 前缀），push 前拦截。
 // 关键字匹配刻意用 `str::contains`（不引正则库，§0.3）。
 
 use crate::config::Config;
-use crate::error::TrustDomainViolation;
+use crate::error::{OwnerMismatch, TrustDomainViolation};
 use crate::id::{parse_project_id, ProjectId};
 use crate::store;
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 
 /// 扫描发现项。
@@ -114,11 +116,31 @@ pub fn check_trust_domain(
     Ok(())
 }
 
-/// 扫描单个 store 的 tasks 目录：归属违规 + 敏感信息。
+/// owner 归属校验（Q10=A，§4.5）：`owner` 须等于文档所在 `users/<user_id>/` 目录名。
+///
+/// **以目录为准，不采信文档自称**——两者不符正是要拦的情形。字段缺失（或空值）同样阻断，
+/// 因为无法证明归属。
+pub fn check_owner(content: &str, expected_owner: &str, file: &Path) -> Result<()> {
+    match extract_field(content, "owner") {
+        Some(owner) if owner == expected_owner => Ok(()),
+        Some(owner) => Err(OwnerMismatch {
+            owner,
+            expected: expected_owner.to_string(),
+            file: file.to_path_buf(),
+        }
+        .into()),
+        None => bail!(
+            "{} 缺少 owner 字段，无法校验归属（应为 `{expected_owner}`）",
+            file.display()
+        ),
+    }
+}
+
+/// 扫描单个 store 的**当前用户命名空间**：两道归属违规 + 敏感信息。
 pub fn scan_store(root: &Path, cfg: &Config, store_name: &str) -> Vec<Finding> {
     let mut findings = Vec::new();
     let mut files = Vec::new();
-    walk_md(&store::tasks_dir(root, store_name), &mut files);
+    walk_md(&store::tasks_dir(root, store_name, &cfg.user), &mut files);
     files.sort();
 
     for file in files {
@@ -126,7 +148,7 @@ pub fn scan_store(root: &Path, cfg: &Config, store_name: &str) -> Vec<Finding> {
             continue;
         };
 
-        // 归属校验
+        // ① 信任域归属校验（project_id ↔ store）
         if let Some(raw) = extract_field(&content, "project_id") {
             match parse_project_id(&raw) {
                 Ok(pid) => {
@@ -155,7 +177,24 @@ pub fn scan_store(root: &Path, cfg: &Config, store_name: &str) -> Vec<Finding> {
             });
         }
 
-        // 敏感信息
+        // ② owner 归属校验（owner ↔ users/<user_id>）；以**文件实际所在目录**为准
+        if let Some(owner_id) = store::owner_of_path(root, store_name, &file) {
+            match extract_field(&content, "owner") {
+                Some(owner) if owner == owner_id => {}
+                Some(owner) => findings.push(Finding {
+                    file: file.clone(),
+                    kind: "owner".into(),
+                    detail: format!("owner `{owner}` 与所在命名空间 `users/{owner_id}/` 不符"),
+                }),
+                None => findings.push(Finding {
+                    file: file.clone(),
+                    kind: "owner".into(),
+                    detail: format!("缺少 owner 字段（所在命名空间 `users/{owner_id}/`）"),
+                }),
+            }
+        }
+
+        // ③ 敏感信息
         for detail in secret_hits(&content) {
             findings.push(Finding {
                 file: file.clone(),
@@ -208,5 +247,50 @@ mod tests {
         assert!(hits.iter().any(|h| h.contains("token=")));
         assert!(hits.iter().any(|h| h.contains("RSA PRIVATE KEY")));
         assert!(secret_hits(DOC).is_empty());
+    }
+
+    #[test]
+    fn owner_mismatch_detected() {
+        let doc = "- project_id: codeup:iptv/android/v4\n- owner: alice\n";
+        assert!(check_owner(doc, "alice", Path::new("x.md")).is_ok());
+        assert!(check_owner(doc, "bob", Path::new("x.md")).is_err());
+        // 空值与缺失一律阻断（无法证明归属）
+        assert!(check_owner("- owner:\n", "bob", Path::new("x.md")).is_err());
+        assert!(check_owner("- status: x\n", "bob", Path::new("x.md")).is_err());
+    }
+
+    #[test]
+    fn scan_store_flags_wrong_namespace() {
+        let root = std::env::temp_dir().join(format!("handoff-scan-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let cfg = Config {
+            root: root.clone(),
+            user: "alice".to_string(),
+            ..Config::default()
+        };
+
+        let dir = root.join("work/users/alice/tasks/codeup/iptv/android/v4");
+        std::fs::create_dir_all(&dir).unwrap();
+        // 正例：owner 与命名空间一致
+        std::fs::write(
+            dir.join("good.md"),
+            "- project_id: codeup:iptv/android/v4\n- owner: alice\n",
+        )
+        .unwrap();
+        // 反例：复制他人文档后在其命名空间续写（自称 bob，实际位于 alice）
+        std::fs::write(
+            dir.join("bad.md"),
+            "- project_id: codeup:iptv/android/v4\n- owner: bob\n",
+        )
+        .unwrap();
+
+        let findings = scan_store(&root, &cfg, "work");
+        let owners: Vec<&Finding> = findings.iter().filter(|f| f.kind == "owner").collect();
+        assert_eq!(owners.len(), 1, "仅 bad.md 应报 owner 违规：{findings:?}");
+        assert!(owners[0].file.ends_with("bad.md"));
+        // 正反例都不应误报信任域
+        assert!(!findings.iter().any(|f| f.kind == "trust-domain"));
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
