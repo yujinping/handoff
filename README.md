@@ -8,8 +8,24 @@ Rust 单二进制 CLI，实现跨客户端会话交接的**传输层与标识层
 
 ## 状态
 
-- **P1**：仓库骨架已建，`src/main.rs` 占位（打印用法）。
-- **P2**：实现 `handoff` CLI（`id` / `where` / `new` / `show` / `list` / `save` / `sync` / `scan`）+ project_id 派生 + 信任域校验。
+- **P1** ✅ 仓库骨架已建。
+- **P2** ✅ 已实现 `handoff` CLI 八个子命令 + project_id 派生 + 信任域校验（24 项单测通过，clippy 零告警）。
+- **P3** 待办：可移植 Skill 流程落地（SKILL.md 目前仍是契约骨架）。
+
+## 命令
+
+```bash
+handoff id [--path <dir>]      # 派生 project_id（<host_alias>:<path>）
+handoff where <project_id>     # 显示归属 store 与磁盘路径
+handoff new <target> [--scope <s>]   # 从模板创建任务文档
+handoff show <target>          # 打印任务文档（注入上下文用）
+handoff list [--open] [--store <s>]  # 列出任务
+handoff save <target> -m "<msg>"     # 校验（信任域+敏感信息）→ commit → push
+handoff sync [--store <s>]     # pull --rebase && push
+handoff scan [--store <s>]     # 敏感信息 + 信任域归属扫描
+```
+
+`<target>` = `<project_id>/<slug>`（全量）或仅 `<slug>`（从当前目录派生 project_id）。
 
 ## 构建
 

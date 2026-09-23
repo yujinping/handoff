@@ -11,8 +11,9 @@ repository = "https://gitee.com/yujinping8620/handoff"
 name = "handoff"
 path = "src/main.rs"
 
-# P2 引入（§0.3 / §7）：
-# clap = { version = "4", features = ["derive"] }
-# anyhow = "1"
-# thiserror = "1"
-# toml = "0.8"
+# 依赖极简（§0.3）：不引 git2/libgit2（直接 shell-out git），不引正则库。
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+thiserror = "1"
+toml = "0.8"

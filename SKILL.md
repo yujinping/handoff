@@ -3,9 +3,9 @@ name: handoff
 description: 跨客户端会话交接——把当前任务进度写入本地 markdown 并同步到 git 远端，或在另一台机器/客户端恢复续做。当用户说"交接 / 收尾 / handoff / 续做 / 继续某任务"时触发。
 ---
 
-# Handoff 交接技能（骨架 · P1）
+# Handoff 交接技能（契约骨架）
 
-> 本技能为 P1 占位，完整流程见 P3。此处仅固化契约与依赖，动作全部委托 `handoff` CLI。
+> 本技能目前固化契约与依赖，完整流程细化见 P3。动作全部委托 `handoff` CLI（P2 已实现）。
 
 ## 触发词
 
@@ -24,4 +24,5 @@ description: 跨客户端会话交接——把当前任务进度写入本地 mar
 
 ## 依赖
 
-需要 `handoff` CLI（P2 实现）已安装并在 PATH；本机 `~/.config/handoff/config.toml` 指向 `ai-handoff` 根。
+- `handoff` CLI（P2 已实现）需安装并在 PATH；构建方式见 `README.md`。
+- 本机 `~/.config/handoff/config.toml` 指向 `ai-handoff` 根（或设 `HANDOFF_ROOT` 环境变量）。
