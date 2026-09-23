@@ -1,0 +1,15 @@
+# <project_id> / <slug>
+- project_id: <host_alias>:<ns>/<repo>     # 由 handoff id 派生，勿手改
+- scope: <可选：monorepo 模块，如 v4-core>
+- remote: <git remote url>
+- status: in-progress | blocked | done
+- updated: YYYY-MM-DD HH:mm  by: <host>
+- goal: 一句话目标
+- current: 已完成到什么程度
+- decisions: 已定决策 + 理由（避免重复讨论）
+- files: 涉及文件/链接（含 @file:line 引用）
+- next: 编号的可执行下一步
+- open: 待确认问题
+- blockers: 阻塞项
+- env: 关键命令 / 环境变量说明
+- refs: 相关文档/链接
