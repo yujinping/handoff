@@ -11,6 +11,7 @@ mod error;
 mod id;
 mod repo;
 mod scan;
+mod skill;
 mod store;
 mod template;
 
@@ -41,6 +42,7 @@ fn run() -> Result<()> {
         Cmd::Save { target, message } => cmd_save(&cfg, &target, &message),
         Cmd::Sync { store } => cmd_sync(&cfg, store.as_deref()),
         Cmd::Scan { store } => cmd_scan(&cfg, store.as_deref()),
+        Cmd::InstallSkill { from, roots } => cmd_install_skill(from, &roots),
     }
 }
 
@@ -206,4 +208,42 @@ fn cmd_scan(cfg: &Config, filter: Option<&str>) -> Result<()> {
     } else {
         bail!("发现 {total} 处问题")
     }
+}
+
+/// 把技能（SKILL.md 所在目录）符号链接到各客户端技能根，实现「一处修改、处处生效」。
+/// 幂等：已正确链接则跳过；遇到冲突不覆盖，累计后以非 0 退出。
+fn cmd_install_skill(from: Option<PathBuf>, roots: &[PathBuf]) -> Result<()> {
+    let src_arg = from.unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+    let src = skill::resolve_source(&src_arg)?;
+    let targets = if roots.is_empty() {
+        skill::default_roots()?
+    } else {
+        skill::roots_from(roots)
+    };
+
+    println!("source: {}", src.display());
+    let mut problems = 0usize;
+    for (client, root, res) in skill::install_all(&src, &targets) {
+        let link = root.join(skill::SKILL_NAME);
+        match res {
+            Ok(skill::LinkState::Created) => {
+                println!("  [created]   {client:<11} {}", link.display());
+            }
+            Ok(skill::LinkState::AlreadyLinked) => {
+                println!("  [already]   {client:<11} {}", link.display());
+            }
+            Ok(skill::LinkState::Conflict(why)) => {
+                problems += 1;
+                println!("  [conflict]  {client:<11} {} — {why}", link.display());
+            }
+            Err(e) => {
+                problems += 1;
+                println!("  [error]     {client:<11} {} — {e:#}", root.display());
+            }
+        }
+    }
+    if problems > 0 {
+        bail!("{problems} 处未完成；请处理冲突（不覆盖已有目录）后重试");
+    }
+    Ok(())
 }

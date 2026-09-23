@@ -72,4 +72,13 @@ pub enum Cmd {
         #[arg(long)]
         store: Option<String>,
     },
+    /// 把 SKILL.md 安装（符号链接）到各客户端技能目录
+    InstallSkill {
+        /// 技能源目录（默认：本二进制的编译期工具仓库路径）
+        #[arg(long)]
+        from: Option<PathBuf>,
+        /// 指定技能根目录（可多次）；缺省用内置的 WorkBuddy + Zed/Codex
+        #[arg(long = "root")]
+        roots: Vec<PathBuf>,
+    },
 }

@@ -1,28 +1,117 @@
 ---
 name: handoff
-description: 跨客户端会话交接——把当前任务进度写入本地 markdown 并同步到 git 远端，或在另一台机器/客户端恢复续做。当用户说"交接 / 收尾 / handoff / 续做 / 继续某任务"时触发。
+description: "跨客户端会话交接：把当前任务进度写成 markdown 交接文档并同步到 git 远端，或在另一台机器/另一个 AI 客户端恢复续做。当用户说\"交接 / 收尾 / 保存进度 / handoff / 续做 / 继续某任务 / 接着上次做\"时使用。"
+description_zh: "跨客户端会话交接——写入/同步/恢复任务级 markdown 交接文档"
+description_en: "Cross-client session handoff: save task progress to markdown + git, resume on another machine/agent"
+version: 1.0.0
+agent_created: true
+allowed-tools: Bash,Read,Write,Edit,Grep,Glob,AskUserQuestion
 ---
 
-# Handoff 交接技能（契约骨架）
+# Handoff 交接（跨客户端会话交接）
 
-> 本技能目前固化契约与依赖，完整流程细化见 P3。动作全部委托 `handoff` CLI（P2 已实现）。
+把「一个任务」的进度写成**本地 markdown 文档**并同步到 git 远端，使同一任务可在**另一台机器、另一个 AI 客户端**上接着做。
+真相源是 markdown 文件（可离线读、可 diff、可版本化），git 负责同步，本技能只描述流程——**所有动作委托 `handoff` CLI**。
 
-## 触发词
+## 何时使用
 
-交接 / 收尾 / handoff / 续做 / 继续某任务
+| 场景 | 流程 |
+|---|---|
+| 用户要收尾 / 交接 / 保存进度 / 换机器 | **A. save** |
+| 用户说续做 / 继续某任务 / 接着上次做 | **B. resume** |
+| 只在当前会话内继续，不涉及跨机 | 不需要本技能 |
 
-## 契约（流程）
+## 前置检查（两个流程都要做）
 
-- **save（保存交接）**：`handoff id` 取当前 project_id → 按模板生成/更新 `tasks/<host_alias>/<ns>/<repo>/<slug>.md` → `handoff scan` → `handoff save`（commit + push）。
-- **resume（恢复续做）**：`handoff sync`（pull --rebase && push）→ `handoff list --open` → `handoff show <id>` → 注入上下文 → 执行用户指令。
+1. **CLI 可用**：`handoff --version`。若命令不存在 → 告知用户需要先安装 `handoff`（见工具仓库 README），并终止流程。
+2. **拿到 project_id**：在**目标任务所在的项目目录**下执行 `handoff id`，输出 `project_id` / `store` / `remote`。
+   - 若输出 `local:<目录名>`（无 git remote），向用户确认是否照此使用；**不要凭空编造 project_id**。
+3. **确认 store 归属**：`work` = 公司项目（codeup 等内网域），`personal` = 个人项目（gitee/github）。**绝不可混写**。
 
-## 原则
+## 流程 A · save（保存交接）
 
-- 真相源是本地 markdown，git 负责同步；不引入任何专有存储。
-- 可靠性依赖各客户端常驻规则（见计划 §9），Skill 仅被动加载。
-- 信任域隔离：work（codeup）/ personal（gitee）物理分离，`scan` 阻断跨域写入。
+**A1. 确定 slug**
+- 与该任务既有文档保持一致：先 `handoff list --open` 查看是否已有同任务文档，**有则复用其 slug**（同一任务跨机必须映射到同一文件）。
+- 命名规范：`<模块前缀>--<短横线短语>`，ASCII 小写，例 `v4-core--fix-bearer-401`。monorepo 子模块用前缀（`v4-widget--...`）。
+- 与用户确认 slug（若用户已给出任务名，直接派生，不必追问）。
 
-## 依赖
+**A2. 创建或复用文档**
+- 不存在 → `handoff new <project_id>/<slug> --scope <模块>`（`--scope` 仅 monorepo 子模块需要）。
+- 已存在 → 直接编辑该文件，**不要**重复 `new`（会报已存在）。
 
-- `handoff` CLI（P2 已实现）需安装并在 PATH；构建方式见 `README.md`。
-- 本机 `~/.config/handoff/config.toml` 指向 `ai-handoff` 根（或设 `HANDOFF_ROOT` 环境变量）。
+**A3. 填充字段**（按模板逐项；缺失项写 `none` 而非删除该行）
+
+- `status`：`in-progress` | `blocked` | `done`
+- `updated`：用命令取时间，**不要手写**：`date "+%Y-%m-%d %H:%M"`；`by:` 用 `hostname -s`
+- `goal`：一句话目标
+- `current`：已完成到什么程度（叙述式，便于他人接手）
+- `decisions`：已定决策 **+ 理由**（避免接手者重复讨论）
+- `files`：涉及文件（推荐 `@filepath:line-range` 语法）
+- `next`：**编号的可执行下一步**（最重要字段——决定接手者能否立刻动手）
+- `open`：待确认问题
+- `blockers`：阻塞项
+- `env`：关键命令 / 环境变量 / 依赖前提
+- `refs`：相关文档与链接
+
+**A4. 自查后再提交**
+1. `handoff scan` → 必须输出 `clean`。若有违规，**先修文档**，不要绕过。
+2. `handoff save <project_id>/<slug> -m "<类型>(<范围>): <描述>"`（提交信息遵循用户既有约定式规范）。
+3. 输出给用户：文档路径、project_id、以及在另一台机器上的恢复命令。
+
+## 流程 B · resume（恢复续做）
+
+**B1. 同步**
+- `handoff sync`（先 `pull --rebase` 再 `push`）。
+- 若 store 尚未克隆到本机 → 先 `git clone <remote> <store 目录>`，再继续。
+- 若 `push` 失败但 `pull` 成功：**不阻塞**，继续 B2，并在结束时提示用户。
+
+**B2. 定位任务**
+- 用户已指明任务 → 直接 `handoff show <target>`。
+- 未指明 → `handoff list --open` 列出未完成任务，让用户选择。若列表为空，如实告知。
+
+**B3. 读文档并校验**
+- `handoff show <target>` 读取全文。
+- 若 `status: done` → 提示用户该任务已归档，**询问**是否仍要继续，不要默默修改。
+
+**B4. 复述与确认**
+- 向用户复述三件事：**目标**（goal）、**当前进度**（current）、**建议的下一步**（next）。
+- 与用户确认接下来做哪一项，然后执行用户指令。
+
+**B5. 续做完成后**
+- 更新同一 slug 文档（`updated` / `current` / `next` / `open`），再走 **A4** 提交。
+- 任务真正完成时，将 `status` 置 `done`。
+
+## 冲突与异常处理
+
+| 情况 | 处理 |
+|---|---|
+| `sync` 出现 rebase 冲突 | **不要** `git push --force`。保留差异，将冲突点写入文档 `open:`（附两端内容摘要），提示用户人工确认后重试 |
+| 同一 slug 被多机并行编辑 | 提示用户按主机拆分（slug 加 `-<host>` 后缀）或串行操作；不要静默覆盖 |
+| `scan` 报跨信任域 | 文档写入的 store 与其 `project_id` 归属不一致 → 移动到正确 store，不要改 `project_id` 就范 |
+| `scan` 报敏感信息 | 删除对应内容后重试；**不得** `--no-verify` 或绕过 |
+| `handoff` 命令缺失 | 终止并告知安装方式，不要用裸 `git` 手工模拟流程 |
+
+## 安全红线
+
+1. **禁止**在交接文档写入 token / 密钥 / 口令 / 私钥 / 带凭据的连接串。`scan` 会阻断，但应先自查。
+2. **信任域物理隔离**：公司项目（`work`）文档只能落在 work store；个人项目只能落在 personal store。跨域即信息外泄。
+3. **不强制推送**：任何情况下不用 `--force` / `--force-with-lease`。
+4. 不确定归属时，先 `handoff where <project_id>` 查清落点再写。
+
+## 命令速查
+
+| 命令 | 用途 |
+|---|---|
+| `handoff id` | 派生当前目录的 project_id + store |
+| `handoff where <id>` | 查 project 的归属 store 与磁盘路径 |
+| `handoff new <id>/<slug>` | 从模板建任务文档 |
+| `handoff show <id>/<slug>` | 打印文档（注入上下文） |
+| `handoff list --open` | 列出未完成任务 |
+| `handoff save <id>/<slug> -m "…"` | 校验 + 提交 + 推送 |
+| `handoff sync` | pull --rebase && push |
+| `handoff scan` | 敏感信息 + 信任域扫描 |
+
+## 说明
+
+- 本技能**不会自动触发**（Skill 均为按需加载）。「任务收尾自动写交接 / 新会话自动先 sync」由各客户端常驻规则承担（AGENTS.md / MEMORY.md 等）。
+- 本技能正文不依赖任何客户端专有界面；跨客户端（WorkBuddy / Codex / Zed）行为一致。
