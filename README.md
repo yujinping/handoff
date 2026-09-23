@@ -23,7 +23,8 @@ Rust 单二进制 CLI，实现跨客户端会话交接的**传输层与标识层
 - **P2** ✅ 已实现 `handoff` CLI 八个子命令 + project_id 派生 + 信任域校验（28 项单测通过，clippy 零告警）。
 - **P3** ✅ 完整 `SKILL.md` + `install-skill` 子命令；已链接 WorkBuddy 与 Zed/Codex 两个技能根。
 - **P4.5** ✅ 多用户与身份标识：`users/<user_id>/` 命名空间、user_id 四级解析、`owner`/`host`/`updated` 字段拆分、owner 归属校验、`whoami` 子命令；三仓库已迁移到 `users/` 布局并加 `.gitattributes`。
-- **P4** 待办：各客户端常驻规则（触发与自动加载）。
+- **P4** ✅ 常驻规则：内容源 `rules/agent-rules.md`，已注入 WorkBuddy / Codex / Zed 三处常驻上下文（见下节）。
+- **P5** 待办：跨客户端真机验证（WorkBuddy / Codex / Zed 各跑一次 save→resume）。
 
 ## 多用户与身份标识（§4.5）
 
@@ -85,6 +86,31 @@ handoff install-skill
 > Git Bash 下 `install-skill` 不可用（Windows 构建走 `#[cfg(not(unix))]` 分支并明确报错）；该环境请手动把
 > 本仓库目录复制/链接到上述技能根。
 
+
+## 常驻规则安装
+
+技能**不会自触发**，故另需把两条规则写进各客户端的**常驻上下文**。规则内容源为
+[`rules/agent-rules.md`](rules/agent-rules.md)（`handoff:begin` / `handoff:end` 哨兵之间即规则块），
+需**整块**追加到下列文件末尾：
+
+| 客户端 | 目标文件 | 读取机制 |
+|---|---|---|
+| WorkBuddy | `~/.workbuddy/MEMORY.md` | 用户级长期记忆，每会话注入 |
+| Codex | `~/.codex/AGENTS.md` | 全局 AGENTS.md（项目级可叠加） |
+| Zed | `~/.config/zed/AGENTS.md` | Personal Instructions，注入每个项目 |
+
+两条规则：
+
+1. **收尾即落盘**——任务到可交接节点（完成一阶段 / 用户说"交接""收尾""保存进度" / 会话即将结束）时，
+   按 SKILL.md 的 save 流程落盘并推送。
+2. **续做先取档**——用户说"继续""接着做""恢复"某任务时，先 `handoff sync` → `list --open` →
+   `show <id>/<slug>`，读完再执行。
+
+规则自带**生效范围判据**：仅当 `handoff id` 的 host_alias 属已登记域（`codeup`/`gitee`/`github`），
+或该 project_id 已有任务文档时才生效——否则静默跳过，避免在任意目录生成 `local:*` 噪声文档。
+
+> 尚未提供 `install-rules` 子命令（三处一次性手工注入即可）；哨兵注释使将来机械替换可行。
+> 修改规则请改 `rules/agent-rules.md`，再同步三处，**不要**直接改客户端文件内的该块。
 
 ## 构建
 

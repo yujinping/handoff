@@ -119,5 +119,10 @@ allowed-tools: Bash,Read,Write,Edit,Grep,Glob,AskUserQuestion
 
 ## 说明
 
-- 本技能**不会自动触发**（Skill 均为按需加载）。「任务收尾自动写交接 / 新会话自动先 sync」由各客户端常驻规则承担（AGENTS.md / MEMORY.md 等）。
+- 本技能**不会自动触发**（Skill 均为按需加载）。「任务收尾自动写交接 / 新会话自动先取档」由各客户端
+  **常驻规则**承担，内容源为 `rules/agent-rules.md`，已注入 `~/.workbuddy/MEMORY.md`（WorkBuddy）、
+  `~/.codex/AGENTS.md`（Codex）、`~/.config/zed/AGENTS.md`（Zed）。
+- **主动触发的边界**：常驻规则仅在「`handoff id` 的 host_alias 属已登记域」或「该 project_id 已有任务文档」
+  时生效；否则静默跳过。但若是**用户明确要求交接**（点名 / 说"交接""保存进度"），即使落在
+  `local:<目录名>` 也照 §前置检查-2 向用户确认后执行。
 - 本技能正文不依赖任何客户端专有界面；跨客户端（WorkBuddy / Codex / Zed）行为一致。
