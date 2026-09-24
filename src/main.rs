@@ -223,9 +223,14 @@ fn cmd_save(cfg: &Config, target: &str, message: &str) -> Result<()> {
     }
 
     let repo_dir = store::store_dir(&cfg.root, &store_name);
-    repo::commit_all(&repo_dir, message)?;
+    let committed = repo::commit_all_idempotent(&repo_dir, message)?;
     repo::push(&repo_dir)?;
-    println!("saved: {} ({slug})", pid.as_str());
+    if committed {
+        println!("saved: {} ({slug})", pid.as_str());
+    } else {
+        // 幂等 save：无新提交（典型于命令重跑），push 兜底同步后仍视为成功。
+        println!("saved (no changes): {} ({slug})", pid.as_str());
+    }
     Ok(())
 }
 

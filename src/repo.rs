@@ -68,11 +68,23 @@ pub fn remote_url(dir: &Path) -> Option<String> {
     None
 }
 
-/// add -A + commit。
-pub fn commit_all(dir: &Path, message: &str) -> Result<()> {
+/// add -A + commit（幂等）：无变更可提交视为成功，返回是否产生了新提交。
+///
+/// @design P5 真机测试结论（2026-09-24）：AI 客户端的沙箱升级重跑会让同一 save 命令
+/// 执行两次，第二次必然 nothing to commit（该信息走 stdout、exit 1），若按失败处理
+/// 会误报。重试环境下 save 必须幂等。
+pub fn commit_all_idempotent(dir: &Path, message: &str) -> Result<bool> {
     git(dir, &["add", "-A"])?;
-    git(dir, &["commit", "-m", message])?;
-    Ok(())
+    match git(dir, &["commit", "-m", message]) {
+        Ok(_) => Ok(true),
+        Err(e) => {
+            if format!("{e:#}").contains("nothing to commit") {
+                Ok(false)
+            } else {
+                Err(e)
+            }
+        }
+    }
 }
 
 /// push；首次无 upstream 时回退 `push --set-upstream origin HEAD`。
