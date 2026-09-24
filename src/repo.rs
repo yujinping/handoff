@@ -17,10 +17,19 @@ pub fn git(dir: &Path, args: &[&str]) -> Result<String> {
         .output()
         .with_context(|| format!("执行 `git {}` 失败", args.join(" ")))?;
     if !out.status.success() {
+        // 诊断信息保留退出码与 stdout 摘录：git 的部分失败（如 nothing to commit）走 stdout，
+        // 仅凭 stderr 会得到空消息，无法定位（P5 真机测试实测踩坑，2026-09-24）。
+        let stdout_tail = {
+            let s = String::from_utf8_lossy(&out.stdout);
+            let t = s.trim();
+            if t.len() > 200 { format!("{}…", &t[t.len() - 200..]) } else { t.to_string() }
+        };
         bail!(
-            "`git {}` 退出非零: {}",
+            "`git {}` 退出非零(code={}): {}{}",
             args.join(" "),
-            String::from_utf8_lossy(&out.stderr).trim()
+            out.status.code().map(|c| c.to_string()).unwrap_or_else(|| "signal".into()),
+            String::from_utf8_lossy(&out.stderr).trim(),
+            if stdout_tail.is_empty() { String::new() } else { format!(" | stdout: {stdout_tail}") }
         );
     }
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
