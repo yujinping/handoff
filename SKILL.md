@@ -65,6 +65,8 @@ allowed-tools: Bash,Read,Write,Edit,Grep,Glob,AskUserQuestion
 **B1. 同步**
 - `handoff sync`（先 `pull --rebase` 再 `push`）。
 - 若 store 尚未克隆到本机 → 先 `git clone <remote> <store 目录>`，再继续。
+  （store 根默认 `~/.handoff`，即 `~/.handoff/work` / `~/.handoff/personal`；可用 `HANDOFF_ROOT` 或
+  `~/.config/handoff/config.toml` 的 `stores.root` 覆盖。）
 - 若 `push` 失败但 `pull` 成功：**不阻塞**，继续 B2，并在结束时提示用户。
 
 **B2. 定位任务**

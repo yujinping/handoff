@@ -121,4 +121,21 @@ cargo build --release
 
 ## 仓库边界
 
-本仓库只放工具源码与模板；**交接数据不在此处**，分别位于同级 `../work` 与 `../personal`。
+本仓库只放工具源码与模板；**交接数据不在此处**，位于独立的 store 仓库（`work/` 与 `personal/`）。
+
+## store 根与跨机恢复
+
+store 根默认落 `~/.handoff`（其下为 `work/`、`personal/` 两个独立 git 仓库）。覆盖优先级：
+
+```bash
+环境变量 HANDOFF_ROOT  >  ~/.config/handoff/config.toml [stores] root  >  默认 ~/.handoff
+```
+
+store 属 CLI 自有状态（类比 `~/.ssh`），随 `$HOME` 定位，跨机天然一致——新机器只需：
+
+```bash
+git clone <work-store-remote> ~/.handoff/work
+git clone <personal-store-remote> ~/.handoff/personal
+```
+
+即可零配置使用。store 挪出工作区后，其唯一同步机制是 git remote（设计本意），请勿在 store 内做无远端的本地提交。

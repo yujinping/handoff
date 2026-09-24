@@ -4,7 +4,7 @@
 // @design 两层配置（§4.4）：
 //   1) 本机层 `~/.config/handoff/config.toml`（不入库）：store 根路径、host_alias→store 覆盖、remote→id 固定。
 //   2) 仓库层 `_meta/projects.toml`（入库）：canonical 覆盖 / 改名 alias（见 id.rs 消费）。
-// 解析顺序：环境变量 HANDOFF_ROOT > 本机 config.toml > 内置默认（~/data/workspace/personal-open-source/ai-handoff）。
+// 解析顺序：环境变量 HANDOFF_ROOT > 本机 config.toml > 内置默认（~/.handoff）。
 // 刻意不引 serde：直接解析 toml::Value，避免 flatten 在本场景下的兼容坑。
 
 use std::collections::{BTreeSet, HashMap};
@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 /// 默认 store 根（相对 home）。
-pub const DEFAULT_REL_ROOT: &str = "data/workspace/personal-open-source/ai-handoff";
+pub const DEFAULT_REL_ROOT: &str = ".handoff";
 
 /// host → 托管域别名（§4.2 别名表）。
 pub const DEFAULT_ALIASES: &[(&str, &str)] = &[
