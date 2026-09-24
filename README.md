@@ -26,6 +26,37 @@ Rust 单二进制 CLI，实现跨客户端会话交接的**传输层与标识层
 - **P4** ✅ 常驻规则：内容源 `rules/agent-rules.md`，已注入 WorkBuddy / Codex / Zed 三处常驻上下文（见下节）。
 - **P5** 待办：跨客户端真机验证（WorkBuddy / Codex / Zed 各跑一次 save→resume）。
 
+## 安装（新机器）
+
+前置依赖：`git`、Rust 工具链（`cargo`，edition 2021，未设 MSRV；开发环境 cargo 1.98）。
+
+```bash
+# 1. 工具本体：clone → 构建 → 挂到 PATH
+git clone https://gitee.com/yujinping8620/handoff.git
+cd handoff && cargo build --release
+ln -sfn "$PWD/target/release/handoff" ~/.cargo/bin/handoff   # ~/.cargo/bin 须在 PATH
+
+# 2. store 数据：clone 到默认根 ~/.handoff（见「store 根与跨机恢复」）
+git clone <personal-store-remote> ~/.handoff/personal
+git clone <work-store-remote> ~/.handoff/work                # 公司机器才需要
+
+# 3. 技能链接 + 常驻规则
+handoff install-skill    # SKILL.md 链接到 WorkBuddy(~/.workbuddy/skills) / Zed·Codex(~/.agents/skills)
+# 常驻规则：把 rules/agent-rules.md 的哨兵块整段追加到三客户端常驻文件（见下文「常驻规则安装」）
+
+# 4. 验证
+handoff whoami           # user_id 命中级应为 git:user.name 或更高
+handoff list --open      # 应列出各 store 的未完成任务
+handoff sync             # pull --rebase && push 全绿
+```
+
+注意事项：
+
+- `git config --global user.name` **必须先设置**（sanitize 后须含 ASCII 字母数字），否则 user_id 落到兜底 `user`、写入别人的命名空间前会被 owner 校验拦下；用 `handoff whoami` 诊断。
+- `push` 需要对应远端凭据（gitee 个人仓库 / codeup 公司仓库）。
+- 新机器若只想临时改 store 根：`export HANDOFF_ROOT=~/somewhere`；永久配置用 `~/.config/handoff/config.toml`（见「store 根与跨机恢复」）。
+- 技能在**会话启动时**装配，`install-skill` 后需**新开会话**。
+
 ## 多用户与身份标识（§4.5）
 
 交接数据按 `users/<user_id>/` 分命名空间，同一任务在不同用户下互不覆盖：
