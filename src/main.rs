@@ -163,15 +163,25 @@ fn cmd_new(cfg: &Config, target: &str, scope: Option<&str>) -> Result<()> {
 }
 
 fn cmd_show(cfg: &Config, target: &str) -> Result<()> {
-    let (pid, slug) = resolve_target(cfg, target)?;
-    let path = store::task_path(&cfg.root, cfg, &pid, &slug);
+    // `latest`：最近更新的未完成任务（免记长 target）。
+    let path = if target == "latest" {
+        let tasks = collect_tasks(cfg, None, true);
+        let t = scan::pick_latest_open(&tasks).context("没有未完成的任务可显示（latest）")?;
+        eprintln!("latest: [{}] {}/{}", t.store, t.pid, t.slug);
+        t.path.clone()
+    } else {
+        let (pid, slug) = resolve_target(cfg, target)?;
+        store::task_path(&cfg.root, cfg, &pid, &slug)
+    };
     let content =
         std::fs::read_to_string(&path).with_context(|| format!("读取失败：{}", path.display()))?;
     print!("{content}");
     Ok(())
 }
 
-fn cmd_list(cfg: &Config, open: bool, filter: Option<&str>) -> Result<()> {
+/// 汇总各 store 的任务条目（list / latest 共用）。
+fn collect_tasks(cfg: &Config, filter: Option<&str>, open_only: bool) -> Vec<scan::TaskHit> {
+    let mut hits = Vec::new();
     for store_name in target_stores(cfg, filter) {
         let mut files = Vec::new();
         scan::walk_md(
@@ -184,13 +194,36 @@ fn cmd_list(cfg: &Config, open: bool, filter: Option<&str>) -> Result<()> {
                 continue;
             };
             let status = scan::extract_field(&content, "status").unwrap_or_else(|| "?".into());
-            if open && status == "done" {
+            if open_only && status == "done" {
                 continue;
             }
             let pid = scan::extract_field(&content, "project_id").unwrap_or_else(|| "?".into());
             let updated = scan::extract_field(&content, "updated").unwrap_or_default();
-            println!("[{store_name}] {pid:<42} {status:<12} {updated}");
+            let slug = f
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("?")
+                .to_string();
+            hits.push(scan::TaskHit {
+                store: store_name.clone(),
+                pid,
+                slug,
+                status,
+                updated,
+                path: f,
+            });
         }
+    }
+    hits
+}
+
+fn cmd_list(cfg: &Config, open: bool, filter: Option<&str>) -> Result<()> {
+    // 输出可直接复制/粘贴的完整 target：`<pid>/<slug>`。
+    for t in collect_tasks(cfg, filter, open) {
+        println!(
+            "[{}] {}/{}  {}  {}",
+            t.store, t.pid, t.slug, t.status, t.updated
+        );
     }
     Ok(())
 }
@@ -244,6 +277,10 @@ fn cmd_sync(cfg: &Config, filter: Option<&str>) -> Result<()> {
         repo::pull_rebase(&dir)?;
         repo::push(&dir)?;
         println!("synced: {store_name}");
+    }
+    // 同步完顺手指出最新任务，免再查 list。
+    if let Some(t) = scan::pick_latest_open(&collect_tasks(cfg, None, true)) {
+        println!("latest: [{}] {}/{}", t.store, t.pid, t.slug);
     }
     Ok(())
 }

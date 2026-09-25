@@ -71,7 +71,8 @@ allowed-tools: Bash,Read,Write,Edit,Grep,Glob,AskUserQuestion
 
 **B2. 定位任务**
 - 用户已指明任务 → 直接 `handoff show <target>`。
-- 未指明 → `handoff list --open` 列出未完成任务，让用户选择。若列表为空，如实告知。
+- 未指明 → `handoff show latest`（最近更新的未完成任务）或 `handoff list --open`
+  列出未完成任务（输出含完整可复制的 target），让用户选择。若列表为空，如实告知。
 
 **B3. 读文档并校验**
 - `handoff show <target>` 读取全文。
@@ -114,9 +115,10 @@ allowed-tools: Bash,Read,Write,Edit,Grep,Glob,AskUserQuestion
 | `handoff where <id>` | 查 project 的归属 store 与磁盘路径 |
 | `handoff new <id>/<slug>` | 从模板建任务文档 |
 | `handoff show <id>/<slug>` | 打印文档（注入上下文） |
-| `handoff list --open` | 列出未完成任务 |
+| `handoff show latest` | 打印最近更新的未完成任务（免记长 target） |
+| `handoff list --open` | 列出未完成任务（输出含可直接复制的完整 target） |
 | `handoff save <id>/<slug> -m "…"` | 校验 + 提交 + 推送 |
-| `handoff sync` | pull --rebase && push |
+| `handoff sync` | pull --rebase && push；结束后提示最新未完成任务 |
 | `handoff scan` | 敏感信息 + 信任域 + owner 扫描 |
 
 ## 说明

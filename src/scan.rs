@@ -73,6 +73,32 @@ pub fn extract_field(content: &str, key: &str) -> Option<String> {
     None
 }
 
+/// list / latest 共用的任务条目（front-matter 的轻量投影）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskHit {
+    /// 归属 store（work / personal）。
+    pub store: String,
+    /// project_id（文档自称，供展示与拼接 target）。
+    pub pid: String,
+    /// slug（取文件名 stem；slug 内分隔符写入时已中和，stem 与 target 末段一致）。
+    pub slug: String,
+    /// status 字段。
+    pub status: String,
+    /// updated 字段（`YYYY-MM-DD HH:MM`，字典序即时间序）。
+    pub updated: String,
+    /// 文档磁盘路径。
+    pub path: PathBuf,
+}
+
+/// 选出最新的未完成任务：`updated` 取字典序最大（格式固定即时间序），
+/// 缺失视为空串（最旧）；并列时按路径稳定排序。无未完成任务返回 None。
+pub fn pick_latest_open(tasks: &[TaskHit]) -> Option<&TaskHit> {
+    tasks
+        .iter()
+        .filter(|t| t.status != "done")
+        .max_by(|a, b| a.updated.cmp(&b.updated).then_with(|| a.path.cmp(&b.path)))
+}
+
 /// project_id 归属是否与所在 store 一致。
 pub fn belongs_to_store(pid: &ProjectId, cfg: &Config, store_name: &str) -> bool {
     pid.store(cfg) == store_name
@@ -220,6 +246,37 @@ mod tests {
         );
         assert_eq!(extract_field(DOC, "status").unwrap(), "in-progress");
         assert!(extract_field(DOC, "missing").is_none());
+    }
+
+    fn hit(store: &str, slug: &str, status: &str, updated: &str) -> TaskHit {
+        TaskHit {
+            store: store.into(),
+            pid: "codeup:iptv/android/v4".into(),
+            slug: slug.into(),
+            status: status.into(),
+            updated: updated.into(),
+            path: PathBuf::from(format!("/tmp/{slug}.md")),
+        }
+    }
+
+    #[test]
+    fn pick_latest_open_prefers_newest_and_skips_done() {
+        let tasks = vec![
+            hit("work", "a", "in-progress", "2026-09-23 19:30"),
+            hit("work", "b", "done", "2026-09-24 23:00"),
+            hit("personal", "c", "in-progress", "2026-09-24 22:00"),
+            hit("work", "d", "in-progress", ""),
+        ];
+        let latest = pick_latest_open(&tasks).unwrap();
+        // done 的 b 虽 updated 最大也被跳过；余下取 updated 字典序最大的 c。
+        assert_eq!(latest.slug, "c");
+    }
+
+    #[test]
+    fn pick_latest_open_empty_or_all_done() {
+        assert!(pick_latest_open(&[]).is_none());
+        let done = vec![hit("work", "a", "done", "2026-09-24 23:00")];
+        assert!(pick_latest_open(&done).is_none());
     }
 
     #[test]

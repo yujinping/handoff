@@ -86,9 +86,10 @@ handoff whoami                 # 打印当前 user_id 与命中级（四级解�
 handoff where <project_id>     # 显示归属 store 与磁盘路径
 handoff new <target> [--scope <s>]   # 从模板创建任务文档
 handoff show <target>          # 打印任务文档（注入上下文用）
-handoff list [--open] [--store <s>]  # 列出任务
+handoff show latest            # 打印最近更新的未完成任务（免记长 target）
+handoff list [--open] [--store <s>]  # 列出任务；输出为可直接复制的完整 target
 handoff save <target> -m "<msg>"     # 校验（信任域+owner+敏感信息）→ commit → push
-handoff sync [--store <s>]     # pull --rebase && push
+handoff sync [--store <s>]     # pull --rebase && push；结束后提示最新未完成任务
 handoff scan [--store <s>]     # 敏感信息 + 双重归属扫描
 handoff install-skill [--from <dir>] [--root <dir>]  # 链接 SKILL.md 到客户端技能根
 ```
