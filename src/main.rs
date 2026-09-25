@@ -17,7 +17,7 @@ mod template;
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::cli::{Cli, Cmd};
 use crate::config::Config;
@@ -267,7 +267,10 @@ fn cmd_scan(cfg: &Config, filter: Option<&str>) -> Result<()> {
 /// 把技能（SKILL.md 所在目录）符号链接到各客户端技能根，实现「一处修改、处处生效」。
 /// 幂等：已正确链接则跳过；遇到冲突不覆盖，累计后以非 0 退出。
 fn cmd_install_skill(from: Option<PathBuf>, roots: &[PathBuf]) -> Result<()> {
-    let src_arg = from.unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+    let src_arg = match from {
+        Some(p) => p,
+        None => default_skill_src()?,
+    };
     let src = skill::resolve_source(&src_arg)?;
     let targets = if roots.is_empty() {
         skill::default_roots()?
@@ -300,4 +303,31 @@ fn cmd_install_skill(from: Option<PathBuf>, roots: &[PathBuf]) -> Result<()> {
         bail!("{problems} 处未完成；请处理冲突（不覆盖已有目录）后重试");
     }
     Ok(())
+}
+
+/// 默认技能源目录：从可执行文件路径**逐级向上**找第一个含 `SKILL.md` 的目录。
+/// 覆盖 `cargo build` 的 `<repo>/target/{debug,release}/handoff` 布局（向上两级即仓库根）。
+/// 不用编译期 `env!("CARGO_MANIFEST_DIR")`——那是构建机的绝对路径，二进制换机即失效。
+fn default_skill_src() -> Result<PathBuf> {
+    // macOS 的 current_exe 不解析软链（如 ~/.cargo/bin/handoff），先 canonicalize 再向上找。
+    let exe = std::env::current_exe()
+        .ok()
+        .and_then(|p| std::fs::canonicalize(p).ok())
+        .context("无法定位可执行文件路径")?;
+    // 候选起点：exe 祖先链（标准 <repo>/target/release 布局）+ cwd 祖先链
+    // （外部 CARGO_TARGET_DIR 时 exe 不在仓库内，但文档流程是在 clone 的仓库里执行）。
+    let mut starts: Vec<PathBuf> = exe.ancestors().skip(1).map(Path::to_path_buf).collect();
+    if let Ok(cwd) = std::env::current_dir() {
+        starts.extend(cwd.ancestors().map(Path::to_path_buf));
+    }
+    for dir in starts {
+        if dir.join("SKILL.md").is_file() {
+            return Ok(dir);
+        }
+    }
+    bail!(
+        "从 {} 及当前目录逐级向上均未找到含 SKILL.md 的目录；\
+         请在 clone 的工具仓库内执行，或 --from <仓库根> 显式指定",
+        exe.display()
+    )
 }

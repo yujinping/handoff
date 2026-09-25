@@ -41,7 +41,8 @@ git clone <personal-store-remote> ~/.handoff/personal
 git clone <work-store-remote> ~/.handoff/work                # 公司机器才需要
 
 # 3. 技能链接 + 常驻规则
-handoff install-skill    # SKILL.md 链接到 WorkBuddy(~/.workbuddy/skills) / Zed·Codex(~/.agents/skills)
+handoff install-skill    # 须在工具仓库内执行（自动从 exe/cwd 向上定位仓库根；亦可用 --from <仓库根>）
+                         # SKILL.md 链接到 WorkBuddy(~/.workbuddy/skills) / Zed·Codex(~/.agents/skills)
 # 常驻规则：把 rules/agent-rules.md 的哨兵块整段追加到三客户端常驻文件（见下文「常驻规则安装」）
 
 # 4. 验证
