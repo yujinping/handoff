@@ -1,9 +1,11 @@
-// Handoff / 交接 — 技能安装（跨客户端符号链接）
+// Handoff / 交接 — 技能安装（跨客户端部署）
 //
 // @author yujinping
 // @design 计划 §8：SKILL.md 是开放标准（Agent Skills），同一份文件放进各客户端技能根目录即可复用。
-// 为避免「多处副本漂移」，本模块不在各客户端保留副本，而是把客户端技能目录里的
-// `handoff` 项**符号链接**到工具仓库根（即 SKILL.md 所在目录），实现「一处修改、处处生效」。
+// 为避免「多处副本漂移」，unix 平台把客户端技能目录里的 `handoff` 项**符号链接**到工具仓库根
+// （即 SKILL.md 所在目录），实现「一处修改、处处生效」。
+// Windows 上符号链接需管理员/开发者模式，普通用户不可靠，改用**复制目录**方式安装：
+// 语义与符号链接一致（幂等 + 冲突不覆盖），代价是升级需重跑 install-skill 刷新副本。
 //
 // 已核实的技能根目录（2026-09）：
 //   - WorkBuddy：`~/.workbuddy/skills/`
@@ -36,9 +38,12 @@ pub enum LinkState {
 }
 
 /// 默认技能根：WorkBuddy 与 agents（Zed + Codex 共用）。
+/// home 目录跨平台解析见 config::home_dir（unix: $HOME；windows: %USERPROFILE%）。
 pub fn default_roots() -> Result<Vec<SkillRoot>> {
-    let home = std::env::var_os("HOME").context("未设置 HOME，无法定位技能目录")?;
-    let home = PathBuf::from(home);
+    let home = crate::config::home_dir();
+    if home == Path::new(".") {
+        bail!("未定位到 home 目录，无法确定技能根；请用 --root 显式指定");
+    }
     Ok(vec![
         SkillRoot {
             client: "WorkBuddy".to_string(),
@@ -110,10 +115,72 @@ pub fn install_one(src: &Path, root: &Path) -> Result<LinkState> {
     Ok(LinkState::Created)
 }
 
-/// 非 Unix 平台：不做符号链接，提示改用复制或手动安装。
+/// 非 Unix 平台：符号链接需管理员/开发者模式，改用**复制目录**安装（语义等价的幂等）。
+/// 已存在且内容一致 → AlreadyLinked；已存在但不一致 → Conflict（不覆盖，交由用户处理）。
 #[cfg(not(unix))]
-pub fn install_one(_src: &Path, _root: &Path) -> Result<LinkState> {
-    bail!("当前平台不支持符号链接安装；请手动复制技能目录，或改用 `agents` 约定的技能根")
+pub fn install_one(src: &Path, root: &Path) -> Result<LinkState> {
+    std::fs::create_dir_all(root)
+        .with_context(|| format!("无法创建/访问技能根目录：{}", root.display()))?;
+    let dest = root.join(SKILL_NAME);
+
+    // 已存在：区分「内容一致（幂等）」与「冲突（不覆盖）」。
+    if dest.exists() {
+        return if dirs_equal(src, &dest) {
+            Ok(LinkState::AlreadyLinked)
+        } else {
+            Ok(LinkState::Conflict(
+                "已存在同名目录且内容与源不一致（不覆盖）".to_string(),
+            ))
+        };
+    }
+
+    copy_tree(src, &dest)
+        .with_context(|| format!("复制技能目录失败：{} → {}", src.display(), dest.display()))?;
+    Ok(LinkState::Created)
+}
+
+/// 递归复制目录树（复制实现专用）。
+#[cfg(not(unix))]
+fn copy_tree(src: &Path, dest: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dest)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let from = entry.path();
+        let to = dest.join(entry.file_name());
+        if from.is_dir() {
+            copy_tree(&from, &to)?;
+        } else {
+            std::fs::copy(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
+/// 递归比较两个目录树是否完全一致（文件名 + 文件内容）。
+#[cfg(not(unix))]
+fn dirs_equal(a: &Path, b: &Path) -> bool {
+    let (Ok(ra), Ok(rb)) = (std::fs::read_dir(a), std::fs::read_dir(b)) else {
+        return false;
+    };
+    let mut names_a: Vec<_> = ra.flatten().map(|e| e.file_name()).collect();
+    let mut names_b: Vec<_> = rb.flatten().map(|e| e.file_name()).collect();
+    names_a.sort();
+    names_b.sort();
+    if names_a != names_b {
+        return false;
+    }
+    for name in names_a {
+        let pa = a.join(&name);
+        let pb = b.join(&name);
+        if pa.is_dir() {
+            if !pb.is_dir() || !dirs_equal(&pa, &pb) {
+                return false;
+            }
+        } else if std::fs::read(pa).ok() != std::fs::read(pb).ok() {
+            return false;
+        }
+    }
+    true
 }
 
 /// 对多个技能根依次安装，返回 (根, 结果) 列表。

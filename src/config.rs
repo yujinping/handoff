@@ -76,11 +76,30 @@ pub struct Config {
     pub local_override: HashMap<String, String>,
 }
 
-/// home 目录（macOS/Linux 均以 HOME 为准）。
+/// home 目录。
+/// unix：`$HOME`；Windows：`%USERPROFILE%`（退 `%HOMEDRIVE%%HOMEPATH%`）。
+/// 全链缺失才退回 `.`（仅作最后兜底，避免生成不可达路径）。
+#[cfg(unix)]
 pub fn home_dir() -> PathBuf {
     std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."))
+}
+
+#[cfg(windows)]
+pub fn home_dir() -> PathBuf {
+    if let Some(home) = std::env::var_os("USERPROFILE") {
+        return PathBuf::from(home);
+    }
+    if let (Some(drive), Some(path)) = (
+        std::env::var_os("HOMEDRIVE"),
+        std::env::var_os("HOMEPATH"),
+    ) {
+        let mut home = PathBuf::from(drive);
+        home.push(path);
+        return home;
+    }
+    PathBuf::from(".")
 }
 
 /// 展开开头的 `~/`。

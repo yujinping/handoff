@@ -32,7 +32,10 @@ pub const DEFAULT_TEMPLATE: &str = "\
 - refs: 相关文档/链接
 ";
 
-/// 当前本地时间 `YYYY-MM-DD HH:mm`（用 `date` 命令，跨 macOS/Linux 一致）。
+/// 当前本地时间 `YYYY-MM-DD HH:mm`。
+/// unix 用 `date +FORMAT`（macOS/Linux 一致）；Windows 的 `date` 命令不支持该格式语法，
+/// 改用 PowerShell `Get-Date`（Windows 10+ 自带，格式化稳定）。失败回退纪元时间。
+#[cfg(unix)]
 pub fn now_str() -> String {
     Command::new("date")
         .arg("+%Y-%m-%d %H:%M")
@@ -44,7 +47,20 @@ pub fn now_str() -> String {
         .unwrap_or_else(|| "1970-01-01 00:00".to_string())
 }
 
+#[cfg(windows)]
+pub fn now_str() -> String {
+    Command::new("powershell")
+        .args(["-NoProfile", "-Command", "Get-Date -Format 'yyyy-MM-dd HH:mm'"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "1970-01-01 00:00".to_string())
+}
+
 /// 当前主机名（写入 `by:` 字段，便于多机冲突归因）。
+#[cfg(unix)]
 pub fn host_str() -> String {
     if let Ok(o) = Command::new("hostname").output() {
         if o.status.success() {
@@ -55,6 +71,11 @@ pub fn host_str() -> String {
         }
     }
     std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown-host".to_string())
+}
+
+#[cfg(windows)]
+pub fn host_str() -> String {
+    std::env::var("COMPUTERNAME").unwrap_or_else(|_| "unknown-host".to_string())
 }
 
 /// 渲染模板：填充 project_id / slug / host_alias / 路径 / scope / remote / owner / 时间 / 主机。

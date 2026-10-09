@@ -53,6 +53,11 @@ jobs:
         if: runner.os == 'macOS' && matrix.cli_target != ''
         run: cargo build --release --target ${{ matrix.cli_target }}
 
+      # 原生平台（linux / windows）跑测试：验证 Windows 分支（home_dir 复制安装等）
+      - name: Test CLI (native)
+        if: matrix.cli_target == ''
+        run: cargo test --release
+
       # 以平台区分文件名的形式上传 CLI，避免发布时同名文件互相覆盖
       - name: Prepare CLI artifact
         shell: bash
