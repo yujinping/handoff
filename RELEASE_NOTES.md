@@ -1,6 +1,16 @@
-# handoff v0.1.0
+# handoff v0.1.1
 
 跨客户端会话交接 CLI：本地 markdown 任务文档 + git 同步。
+
+## v0.1.1 变更
+
+补齐 Windows 平台功能支持（Windows x64 二进制完整可用）：
+
+- `install-skill` Windows 版改为**复制目录**安装（unix 仍为符号链接），
+  语义与符号链接一致：幂等、冲突不覆盖，Windows 上技能可真正安装启用
+- home 目录解析支持 Windows：`%USERPROFILE%`（退 `%HOMEDRIVE%%HOMEPATH%`），
+  修复 store 根落在当前目录的路径错位
+- 模板时间/主机名按平台分体：Windows 用 PowerShell `Get-Date` 与 `%COMPUTERNAME%`
 
 ## 功能
 
