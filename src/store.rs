@@ -123,8 +123,9 @@ mod tests {
         let a = task_path(Path::new("/root"), &cfg_a, &pid, "s");
         let b = task_path(Path::new("/root"), &cfg_b, &pid, "s");
         assert_ne!(a, b);
-        assert!(a.to_string_lossy().contains("/users/alice/"));
-        assert!(b.to_string_lossy().contains("/users/bob/"));
+        // 命名空间段判断用 components（分隔符跨平台：unix `/`、windows `\`）
+        assert!(a.components().any(|c| c.as_os_str() == "alice"));
+        assert!(b.components().any(|c| c.as_os_str() == "bob"));
     }
 
     #[test]
