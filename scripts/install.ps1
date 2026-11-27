@@ -82,18 +82,10 @@ $arch = $env:PROCESSOR_ARCHITEW6432
 if (-not $arch) {
     $arch = $env:PROCESSOR_ARCHITECTURE
 }
-switch ($arch) {
-    'AMD64' {
-        $assetArch = 'amd64'
-    }
-    'ARM64' {
-        $assetArch = 'amd64'
-        Write-Warning 'No native Windows ARM64 build; installing the x64 build (runs under emulation).'
-    }
-    default {
-        throw "Unsupported architecture: $arch (only windows/amd64 is published)."
-    }
+if ($arch -ne 'AMD64') {
+    throw "Unsupported architecture: $arch (only windows/amd64 is published; Windows on ARM is not supported)."
 }
+$assetArch = 'amd64'
 
 $asset = "${Bin}_${ver}_windows_${assetArch}.exe"
 $releaseBase = "$BaseUrl/$Version"

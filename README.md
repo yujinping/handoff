@@ -48,7 +48,7 @@ $env:HANDOFF_VERSION='v0.2.0'; $env:HANDOFF_INSTALL_DIR='C:\tools'
 irm https://raw.githubusercontent.com/yujinping/handoff/main/scripts/install.ps1 | iex
 ```
 
-Windows ARM64 没有原生包，会安装 x64 版本由系统模拟运行。下载脚本后也可直接传参：
+仅支持 Windows x64；Windows on ARM 不提供构建，脚本会直接报错。下载脚本后也可直接传参：
 
 ```powershell
 .\install.ps1 -Version v0.2.0 -Dir C:\tools -NoPath

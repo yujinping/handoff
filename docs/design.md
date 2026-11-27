@@ -30,7 +30,7 @@ AI 会话的上下文随着会话结束而消失。换一个 AI 客户端、换�
 - 跨设备只需在持有数据库的机器上跑 `handoff serve`，其余设备连过来。
 - 单文件 SQLite：备份就是复制文件，迁移就是拷贝文件。
 - 数据可读：数组字段以 JSON 文本存储，`sqlite3` 直接可查。
-- 跨平台单二进制：linux/darwin/windows × amd64/arm64，`CGO_ENABLED=0`。
+- 跨平台单二进制：linux/darwin 的 amd64/arm64，以及 windows/amd64（不支持 Windows on ARM），`CGO_ENABLED=0`。
 
 ### 非目标
 
