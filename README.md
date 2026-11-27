@@ -22,12 +22,29 @@
 
 ## 安装
 
+一条命令，自动识别系统和架构，下载最新 Release 并校验 SHA256：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yujinping/handoff/main/scripts/install.sh | sh
+```
+
+默认装到 `~/.local/bin`。指定版本或目录：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yujinping/handoff/main/scripts/install.sh \
+  | sh -s -- --version v0.2.0 --dir /usr/local/bin
+```
+
+支持 Linux/macOS 的 amd64、arm64。Windows 请从 [Releases](https://github.com/yujinping/handoff/releases/latest) 下载 `handoff_<版本>_windows_amd64.exe` 并改名 `handoff.exe`。
+
+其他方式：
+
 ```bash
 # 从源码
 go install github.com/yujinping/handoff/cmd/handoff@latest
-
-# 或下载 Release 里的对应平台二进制，放进 PATH
 ```
+
+GitHub 下载慢时，可用 `HANDOFF_BASE_URL` 指向镜像前缀（形如 `https://镜像/https://github.com/yujinping/handoff/releases/download`）。
 
 ## 本机使用
 
