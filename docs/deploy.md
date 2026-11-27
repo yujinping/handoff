@@ -141,6 +141,56 @@ handoff list
 
 远程 MCP 客户端填 `https://handoff.example.com/mcp`，带 `Authorization: Bearer hd_...`。
 
+## 接入客户端
+
+支持的客户端都走远程 Streamable HTTP：只填 URL 和 `Authorization: Bearer hd_...`，不用装本地进程。
+
+DSH（写进 `~/.dsh/profiles/<profile>/cordis.patch.yml`，重启生效）：
+
+```yaml
+- insert:
+    - id: mcp-handoff
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: handoff
+        transport: streamable-http
+        url: https://handoff.example.com/mcp
+        headers:
+          Authorization: 'Bearer hd_...'
+        failOnStartupError: true
+```
+
+工具以 `mcp__handoff__handoff_save` 这类名字出现。
+
+Zed（`~/.config/zed/settings.json`）：
+
+```json
+{
+  "context_servers": {
+    "handoff": {
+      "url": "https://handoff.example.com/mcp",
+      "headers": { "Authorization": "Bearer hd_..." }
+    }
+  }
+}
+```
+
+WorkBuddy（`~/.workbuddy/mcp.json`，注意文件名不带点）：
+
+```json
+{
+  "mcpServers": {
+    "handoff": {
+      "type": "streamableHttp",
+      "url": "https://handoff.example.com/mcp",
+      "headers": { "Authorization": "Bearer hd_..." }
+    }
+  }
+}
+```
+
+token 会以明文落在这些配置文件里，`chmod 600` 并别提交到仓库。换 token 时以上三处都要改。
+
 ## 验收
 
 ```bash
