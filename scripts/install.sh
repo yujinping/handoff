@@ -4,7 +4,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/yujinping/handoff/main/scripts/install.sh | sh
 #
 # 可选参数：
-#   --version v0.2.0   指定版本（默认取最新 Release）
+#   --version v0.2.5   指定版本（默认取最新 Release）
 #   --dir /path        安装目录（默认 ~/.local/bin）
 #
 # 环境变量：

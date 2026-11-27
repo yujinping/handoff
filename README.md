@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/yujinping/handoff/main/scripts/inst
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yujinping/handoff/main/scripts/install.sh \
-  | sh -s -- --version v0.2.0 --dir /usr/local/bin
+  | sh -s -- --version v0.2.5 --dir /usr/local/bin
 ```
 
 支持 Linux/macOS 的 amd64、arm64。Windows 用 PowerShell，自动识别架构、校验 SHA256 并加入用户 PATH：
@@ -44,14 +44,14 @@ irm https://raw.githubusercontent.com/yujinping/handoff/main/scripts/install.ps1
 默认装到 `%LOCALAPPDATA%\Programs\handoff`。指定版本或目录时，管道方式用环境变量：
 
 ```powershell
-$env:HANDOFF_VERSION='v0.2.0'; $env:HANDOFF_INSTALL_DIR='C:\tools'
+$env:HANDOFF_VERSION='v0.2.5'; $env:HANDOFF_INSTALL_DIR='C:\tools'
 irm https://raw.githubusercontent.com/yujinping/handoff/main/scripts/install.ps1 | iex
 ```
 
 仅支持 Windows x64；Windows on ARM 不提供构建，脚本会直接报错。下载脚本后也可直接传参：
 
 ```powershell
-.\install.ps1 -Version v0.2.0 -Dir C:\tools -NoPath
+.\install.ps1 -Version v0.2.5 -Dir C:\tools -NoPath
 ```
 
 其他方式：

@@ -5,10 +5,10 @@
 #   irm https://raw.githubusercontent.com/yujinping/handoff/main/scripts/install.ps1 | iex
 #
 # When running the downloaded file you can pass parameters:
-#   .\install.ps1 -Version v0.2.0 -Dir C:\tools -NoPath
+#   .\install.ps1 -Version v0.2.5 -Dir C:\tools -NoPath
 #
 # Piping into iex cannot pass parameters; use environment variables instead:
-#   $env:HANDOFF_VERSION='v0.2.0'; irm ... | iex
+#   $env:HANDOFF_VERSION='v0.2.5'; irm ... | iex
 #   $env:HANDOFF_INSTALL_DIR='C:\tools'; irm ... | iex
 
 param(
