@@ -233,7 +233,7 @@ func TestTokenLifecycle(t *testing.T) {
 	if got.ID != tok.ID || got.Name != "macbook" {
 		t.Fatalf("authenticate = %+v", got)
 	}
-	if _, err := s.Authenticate(ctx, "hdt_deadbeef_wrong", now); !errors.Is(err, ErrInvalidToken) {
+	if _, err := s.Authenticate(ctx, "hd_deadbeef_wrong", now); !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("wrong token: want ErrInvalidToken, got %v", err)
 	}
 	if err := s.RevokeToken(ctx, tok.ID, now); err != nil {

@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS projects (
 );
 
 CREATE TABLE IF NOT EXISTS tokens (
-  id            TEXT    PRIMARY KEY,          -- hdt_ 后的 8 位 hex
+  id            TEXT    PRIMARY KEY,          -- hd_ 后的 8 位 hex
   name          TEXT    NOT NULL,
   hash          TEXT    NOT NULL UNIQUE,      -- sha256(secret) 的 hex
   scope_project TEXT,                         -- NULL = 所有项目；否则为 remote_key
@@ -220,7 +220,7 @@ handoff version
 
 ## 8. 认证
 
-- token 格式：`hdt_<id>_<secret>`。`id` 为 8 位 hex，用于定位行；`secret` 为 32 字节随机数的 base64url。
+- token 格式：`hd_<id>_<secret>`。`id` 为 8 位 hex，用于定位行；`secret` 为 32 字节随机数的 base64url。
 - 数据库只存 `sha256(secret)`；明文 token 只在 `token add` 时打印一次。
 - 校验：解析 id → 查行 → 若 `revoked_at` 非空拒绝 → 比较 hash（`subtle.ConstantTimeCompare`）→ 若 `scope_project` 非空则要求项目匹配。
 - `last_used_at` 最多每 60 秒更新一次，避免每次请求都写库。

@@ -78,7 +78,7 @@ func TestUnauthorized(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("无 token status = %d, want 401", resp.StatusCode)
 	}
-	resp, _ = do(t, ts, http.MethodGet, "/api/v1/handoffs?repo=github.com/a/b", "hdt_bad_bad", nil)
+	resp, _ = do(t, ts, http.MethodGet, "/api/v1/handoffs?repo=github.com/a/b", "hd_bad_bad", nil)
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("错 token status = %d, want 401", resp.StatusCode)
 	}

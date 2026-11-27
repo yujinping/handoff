@@ -17,7 +17,7 @@ import (
 // ErrInvalidToken 表示 token 不存在、格式错误、已吊销或 hash 不匹配。
 var ErrInvalidToken = errors.New("invalid token")
 
-const tokenPrefix = "hdt_"
+const tokenPrefix = "hd_"
 
 // CreateToken 生成并保存一个新 token，返回明文与元数据。
 // 明文只在此刻可见，数据库只存 secret 的 sha256。

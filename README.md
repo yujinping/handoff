@@ -155,7 +155,7 @@ handoff serve --addr 127.0.0.1:8787  # 前面挂 Tailscale / 反代
 
 ```bash
 export HANDOFF_SERVER=https://handoff.example.com
-export HANDOFF_TOKEN=hdt_...
+export HANDOFF_TOKEN=hd_...
 handoff list                         # 自动走 REST
 ```
 
