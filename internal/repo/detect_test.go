@@ -36,7 +36,13 @@ func TestDetectNoOrigin(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git 未安装")
 	}
-	if _, err := Detect(t.TempDir()); !errors.Is(err, ErrNoOrigin) {
+	// 测试目录可能落在某个仓库内部（例如 GOTMPDIR 指向项目内），
+	// 先初始化一个没有 origin 的仓库，保证 git 找到的是它而不是上层仓库。
+	dir := t.TempDir()
+	if err := exec.Command("git", "-C", dir, "init", "-q").Run(); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	if _, err := Detect(dir); !errors.Is(err, ErrNoOrigin) {
 		t.Fatalf("err = %v, want ErrNoOrigin", err)
 	}
 }
