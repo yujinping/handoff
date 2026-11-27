@@ -140,6 +140,7 @@ handoff list
 ```
 
 远程 MCP 客户端填 `https://handoff.example.com/mcp`，带 `Authorization: Bearer hd_...`。
+配置里的副本统一用 `handoff token sync` 维护（见下文「接入客户端」）。
 
 ## 接入客户端
 
@@ -189,7 +190,10 @@ WorkBuddy（`~/.workbuddy/mcp.json`，注意文件名不带点）：
 }
 ```
 
-token 会以明文落在这些配置文件里，`chmod 600` 并别提交到仓库。换 token 时以上三处都要改。
+token 会以明文落在这些配置文件里：`chmod 600`，别提交到仓库。换 token 时不用逐处手改——
+把新明文写进 `~/.handoff/token`（`chmod 600`），跑一次 `handoff token sync`，
+上面这些文件里的 `Bearer hd_...` 就地替换；`handoff token sync --check` 只核对不改文件，
+有不一致时返回非 0。改完重启对应客户端才生效。
 
 ## 验收
 

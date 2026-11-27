@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -21,6 +22,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/yujinping/handoff/internal/buildinfo"
+	"github.com/yujinping/handoff/internal/clientsync"
 	"github.com/yujinping/handoff/internal/config"
 	"github.com/yujinping/handoff/internal/httpapi"
 	"github.com/yujinping/handoff/internal/mcpserver"
@@ -42,6 +44,7 @@ const usage = `handoff —— 按远程 git 仓库交接 AI 会话现场
   handoff ack  --repo R [--workstream W]        确认已接手
   handoff token add --name N [--scope R]        创建远程 token
   handoff token list / revoke ID                管理 token
+  handoff token sync [--file PATH] [--check]    把 token 写进各 MCP 客户端配置
   handoff version
 
 全局选项:
@@ -408,7 +411,7 @@ func cmdAck(args []string) int {
 
 func cmdToken(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "用法: handoff token add|list|revoke")
+		fmt.Fprintln(os.Stderr, "用法: handoff token add|list|revoke|sync")
 		return 2
 	}
 	switch args[0] {
@@ -418,6 +421,8 @@ func cmdToken(args []string) int {
 		return cmdTokenList(args[1:])
 	case "revoke":
 		return cmdTokenRevoke(args[1:])
+	case "sync":
+		return cmdTokenSync(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "handoff: 未知 token 子命令 %q\n", args[0])
 		return 2
@@ -517,6 +522,90 @@ func cmdTokenRevoke(args []string) int {
 	}
 	fmt.Printf("已吊销 token %s\n", id)
 	return 0
+}
+
+func cmdTokenSync(args []string) int {
+	var files stringList
+	var check bool
+	var token string
+	fs := newFlagSet("token sync")
+	fs.StringVar(&token, "token", "", "要写入的 token（默认取 HANDOFF_TOKEN，再退到 token 文件）")
+	fs.Var(&files, "file", "目标配置文件，可重复；省略则自动探测常见客户端")
+	fs.BoolVar(&check, "check", false, "只比对是否一致，不写文件")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	tok, source, err := resolveSyncToken(token)
+	if err != nil {
+		return fail("%v", err)
+	}
+
+	var targets []clientsync.Target
+	if len(files) > 0 {
+		for _, f := range files {
+			targets = append(targets, clientsync.Target{Name: filepath.Base(f), Path: expandPath(f)})
+		}
+	} else {
+		targets = clientsync.Known()
+		if len(targets) == 0 {
+			return fail("没找到可同步的客户端配置：用 --file 指定目标文件")
+		}
+	}
+
+	results, err := clientsync.Sync(targets, tok, check)
+	if err != nil {
+		return fail("%v", err)
+	}
+
+	fmt.Printf("token 来源：%s（%s）\n", source, clientsync.Mask(tok))
+	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(tw, "CLIENT\tSTATE\tPATH")
+	bad := 0
+	for _, r := range results {
+		fmt.Fprintf(tw, "%s\t%s\t%s\n", r.Name, r.State, r.Path)
+		if r.Err != nil {
+			fmt.Fprintf(os.Stderr, "handoff: %s: %v\n", r.Name, r.Err)
+		}
+		switch r.State {
+		case clientsync.CheckDiff, clientsync.Missing, clientsync.Failed:
+			bad++
+		}
+	}
+	_ = tw.Flush()
+	if bad > 0 {
+		return 1
+	}
+	return 0
+}
+
+// resolveSyncToken 按 --token、HANDOFF_TOKEN、token 文件的顺序取明文。
+func resolveSyncToken(explicit string) (string, string, error) {
+	if explicit != "" {
+		return explicit, "--token", nil
+	}
+	if v := config.DefaultToken(); v != "" {
+		return v, "HANDOFF_TOKEN", nil
+	}
+	path := config.TokenFile()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", "", fmt.Errorf("没有可用 token：先 handoff token add，并把明文写入 %s", path)
+	}
+	tok := strings.TrimSpace(string(data))
+	if tok == "" {
+		return "", "", fmt.Errorf("%s 是空的", path)
+	}
+	return tok, path, nil
+}
+
+func expandPath(p string) string {
+	if strings.HasPrefix(p, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, p[2:])
+		}
+	}
+	return p
 }
 
 type stringList []string

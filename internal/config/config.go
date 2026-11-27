@@ -29,6 +29,19 @@ func DefaultToken() string {
 	return strings.TrimSpace(os.Getenv("HANDOFF_TOKEN"))
 }
 
+// TokenFile 返回本机存放 token 明文的路径，默认 ~/.handoff/token。
+// 换 token 时只改这个文件，再用 handoff token sync 推到各客户端。
+func TokenFile() string {
+	if v := strings.TrimSpace(os.Getenv("HANDOFF_TOKEN_FILE")); v != "" {
+		return expand(v)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return "token"
+	}
+	return filepath.Join(home, ".handoff", "token")
+}
+
 // DefaultAddr 返回 serve 的监听地址。
 func DefaultAddr() string {
 	if v := strings.TrimSpace(os.Getenv("HANDOFF_ADDR")); v != "" {

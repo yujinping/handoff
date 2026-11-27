@@ -155,11 +155,75 @@ handoff serve --addr 127.0.0.1:8787  # 前面挂 Tailscale / 反代
 
 ```bash
 export HANDOFF_SERVER=https://handoff.example.com
-export HANDOFF_TOKEN=hd_...
+export HANDOFF_TOKEN="$(cat ~/.handoff/token)"
 handoff list                         # 自动走 REST
 ```
 
-远程 MCP 客户端填 `https://handoff.example.com/mcp`，带 `Authorization: Bearer <token>`。
+### token 只放一处
+
+远程客户端都只接受字面量 `Authorization`，没法引用环境变量，所以同一枚 token 必然
+在每个客户端的配置文件里各存一份。把唯一副本放在 `~/.handoff/token`（`chmod 600`），
+其余位置由一条命令推过去：
+
+```bash
+handoff token add --name macbook > ~/.handoff/token   # 明文只打印一次
+chmod 600 ~/.handoff/token
+
+handoff token sync            # 探测并写入本机已装的客户端配置
+handoff token sync --check    # 只核对，返回非 0 表示有不一致
+handoff token sync --file ~/some/mcp.json   # 指定文件，可重复
+```
+
+`handoff token sync` 只替换 `Bearer hd_...` 里的 token 本体，其余内容和文件权限不动，
+写盘走同目录临时文件 rename，不会留下半个坏配置。配置是软链（stow 之类）时写到软链
+指向的真实文件上，软链本身保留，dotfiles 里那份不会分叉。自动探测的目标：Zed
+（`~/.config/zed/settings.json`）、WorkBuddy（`~/.workbuddy/mcp.json`）、
+Cursor（`~/.cursor/mcp.json`）、Claude Desktop、DSH（`~/.dsh/profiles/*/cordis.patch.yml`）。
+改完要重启客户端才生效；JSONC 的注释不受影响。
+
+### 换新电脑
+
+`handoff token sync` 只替换**已有**的 `Bearer hd_...`，不会替你在客户端里新建条目。
+新机器上每个客户端要先手工写一次 handoff 条目（url + Bearer），之后才归 `sync` 管。
+
+```bash
+# 1. 装二进制
+curl -fsSL https://raw.githubusercontent.com/yujinping/handoff/main/scripts/install.sh | sh
+
+# 2. 在服务端发一枚 token（建议每台机一枚，丢了能单独吊销）
+ssh root@example.com 'HANDOFF_DB=/var/lib/handoff/handoff.db handoff token add --name newbox'
+
+# 3. 粘进唯一副本：umask 077 保证一步就是 0600，不用再 chmod
+mkdir -p ~/.handoff && chmod 700 ~/.handoff
+(umask 077; pbpaste > ~/.handoff/token)   # Linux: xclip -o -selection clipboard
+
+# 4. ~/.zshrc 里加两行，CLI 才知道连哪、用什么身份
+export HANDOFF_SERVER=https://handoff.example.com
+export HANDOFF_TOKEN="$(cat "$HOME/.handoff/token")"
+
+# 5. 每个客户端按上文「接入客户端」填一次条目（token 先写占位串）
+
+# 6. 先确认 token 真能用，再推进客户端并重启
+handoff list --repo <repo>     # 401 就是 token 不对或已吊销
+handoff token sync --check     # 应报不一致（客户端里还是占位串）
+handoff token sync             # 报已更新
+```
+
+第 5 步的条目长这样，先写占位串：
+
+```json
+{ "Authorization": "Bearer hd_00000000_PLACEHOLDER" }
+```
+
+先写占位串的好处：配置文件可以进 dotfiles 而不带真密钥，新机恢复配置后再用 `sync` 灌入
+真值。第 4 步也从 `~/.handoff/token` 读，不把明文写进 dotfiles。只在命令行用、不接 MCP
+的话，第 5、6 步跳过。
+
+服务端没有「校验 token」的接口，鉴权只在带 token 真正调接口（REST 或 `/mcp`）时发生，
+所以第 6 步的 `handoff list` 就是验真的那一下：它通不过，就别往下走。
+
+多设备共用一份库时，远程 MCP 客户端填 `https://handoff.example.com/mcp`，带
+`Authorization: Bearer hd_...`；三种客户端的完整配置见 [docs/deploy.md](docs/deploy.md)。
 
 宿主机离线时远程不可用——这是「一份数据」的代价，也是它简单的原因。
 
