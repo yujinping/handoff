@@ -70,11 +70,21 @@ PrivateTmp=true
 WantedBy=multi-user.target
 ```
 
-数据库目录先建好：`install -d -m 0700 /var/lib/handoff`。
+数据库目录与库文件先建好（`init` 只建表，不重复执行也无害）：
+
+```bash
+install -d -m 0700 /var/lib/handoff
+HANDOFF_DB=/var/lib/handoff/handoff.db handoff init
+```
 
 `HANDOFF_DB` 必须显式写：systemd 的系统级服务没有 `HOME`，`serve` 会退回到
 `./handoff.db`，在 `WorkingDirectory` 是 `/` 时于根目录建一个空库，然后报
 「没有可用的 token」。`WorkingDirectory` 一并固定，避免相对路径乱落。
+
+**默认库是 `~/.handoff/handoff.db`，`HANDOFF_DB`（或 `--db`）只是覆盖它**，两者不需要
+一致，但必须「处处一致」：`serve` 读哪个库，后面 `token add` / `token list` 就得指向
+同一个库。否则 token 写进了默认库、服务却盯着 `/var/lib/handoff`，表现为新 token 立刻
+401 或启动报「没有可用的 token」。
 
 ## Caddy 站点
 
@@ -113,9 +123,10 @@ handoff.example.com {
 ## token
 
 ```bash
-ssh root@example.com handoff token add --name <设备名>   # 明文只打印一次
-ssh root@example.com handoff token list
-ssh root@example.com handoff token revoke <8位id>
+# 与单元里的 HANDOFF_DB 指向同一个库
+ssh root@example.com 'HANDOFF_DB=/var/lib/handoff/handoff.db handoff token add --name <设备名>'   # 明文只打印一次
+ssh root@example.com 'HANDOFF_DB=/var/lib/handoff/handoff.db handoff token list'
+ssh root@example.com 'HANDOFF_DB=/var/lib/handoff/handoff.db handoff token revoke <8位id>'
 ```
 
 前缀 `hd_`。改前缀或吊销后，客户端立刻 401，需要重新下发。
