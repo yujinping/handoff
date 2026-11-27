@@ -163,6 +163,9 @@ handoff list                         # 自动走 REST
 
 宿主机离线时远程不可用——这是「一份数据」的代价，也是它简单的原因。
 
+现成的 systemd + Caddy 部署（含 db 路径、反代站点、token 轮换与验收命令）见
+[docs/deploy.md](docs/deploy.md)。
+
 ## 语义与限额
 
 - **项目键**：`git remote get-url origin` 归一化后的 `host/owner/repo`。`git@github.com:Acme/Widgets.git`、`https://github.com/acme/widgets`、`ssh://git@github.com/acme/widgets.git` 是同一个项目。
@@ -192,4 +195,5 @@ internal/httpapi     远程 MCP + REST，以及 CLI 的 HTTP 客户端
 internal/cli         命令行
 skills/handoff       交接/接手 skill
 docs/design.md       设计文档
+docs/deploy.md       自托管部署（systemd + Caddy）
 ```
