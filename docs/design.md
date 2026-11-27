@@ -202,10 +202,10 @@ GET  /healthz                    无认证
 handoff init                         创建数据库与目录
 handoff mcp                          本地 stdio MCP 服务
 handoff serve [--addr]               远程 HTTP 服务
-handoff save --repo R [--workstream W] [--client C] < handoff.json
-handoff list --repo R [--limit N]
-handoff load --repo R [--workstream W]
-handoff ack  --repo R [--workstream W] [--by NAME]
+handoff save [--repo R] [--workstream W] [--client C] < handoff.json
+handoff list [--repo R] [--limit N]
+handoff load [--repo R] [--workstream W]
+handoff ack  [--repo R] [--workstream W] [--by NAME]
 handoff token add --name N [--scope REPO]
 handoff token list
 handoff token revoke ID
@@ -213,9 +213,10 @@ handoff version
 ```
 
 - `save` 从 stdin 读 JSON（字段同 MCP 入参），便于 skill 与脚本调用；输出保存后的 handoff JSON。
+- `--repo` 省略时自动执行 `git remote get-url origin` 并归一化，所以 skill 在仓库根目录可以直接跑 `handoff load`；不在仓库里则明确报错。
 - `list` 输出对齐的表格；`--json` 输出机器可读格式。
 - 远程模式：`--server URL` 或 `HANDOFF_SERVER`，`--token` 或 `HANDOFF_TOKEN`。设置后 save/list/load/ack 全部走 REST。
-- 退出码：0 成功，1 业务错误（无 pending、校验失败、冲突），2 用法错误，3 网络/服务不可用。
+- 退出码：0 成功，1 业务错误（无 pending、校验失败、冲突、网络/服务不可用），2 用法错误。
 
 ## 8. 认证
 
