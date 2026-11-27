@@ -65,7 +65,7 @@ case "$(uname -s)" in
 Darwin) os="darwin" ;;
 Linux) os="linux" ;;
 *)
-	err "不支持的系统 $(uname -s)。Windows 请从 Release 下载 handoff_*_windows_amd64.exe"
+	err "不支持的系统 $(uname -s)。Windows 请用 PowerShell: irm https://raw.githubusercontent.com/yujinping/handoff/main/scripts/install.ps1 | iex"
 	;;
 esac
 
