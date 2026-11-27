@@ -129,6 +129,19 @@ Cursor / 其他 JSON 配置：
 
 四个工具：`handoff_save`、`handoff_list`、`handoff_load`、`handoff_ack`。参数与 CLI 字段一一对应。
 
+## 技能（/handoff）
+
+`skills/handoff/SKILL.md` 是技能的**唯一源**，要改行为就改它，不要改已安装的副本。
+
+发布到本机所有 AI 客户端（`~/.agents/skills` 是 → 本机 agents-skills 仓库 `skills/` 的软链）：
+
+```bash
+cp skills/handoff/SKILL.md ~/.agents/skills/handoff/SKILL.md
+```
+
+然后到 agents-skills 仓库提交 `skills/handoff/SKILL.md` 与 README 的表格，副本才会同步到其他机器。
+技能本身优先调 MCP 工具，其次 CLI，两者都没有才降级成仓库内 `.local/handoff/` 文件。
+
 ## 跨设备
 
 在存有数据库的机器上：
