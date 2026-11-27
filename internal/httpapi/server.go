@@ -43,7 +43,14 @@ func (s *Server) Handler() http.Handler {
 	})
 
 	// MCP：Streamable HTTP。传输层自己处理 GET/POST/DELETE。
-	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return s.mcp }, nil)
+	//
+	// DisableLocalhostProtection：SDK 默认把「连到 127.0.0.1 但 Host 不是 localhost」
+	// 的请求当成 DNS rebinding 攻击拒掉（403 invalid Host header）。远程形态本来
+	// 就监听 127.0.0.1、由反代带着公网域名转发进来，开着这条会把正常请求全挡掉；
+	// 这里由 requireAuth 的 Bearer 校验与反代的路径白名单负责鉴权。
+	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return s.mcp }, &mcp.StreamableHTTPOptions{
+		DisableLocalhostProtection: true,
+	})
 	mux.Handle("/mcp", s.requireAuth(mcpHandler))
 
 	mux.HandleFunc("POST /api/v1/handoffs", s.requireAuthFunc(s.save))

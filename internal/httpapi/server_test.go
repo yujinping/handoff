@@ -196,3 +196,53 @@ func TestBadJSON(t *testing.T) {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
 	}
 }
+
+// TestMCPThroughProxyHost 覆盖「反代带着公网域名转发、服务listen在 127.0.0.1」
+// 这条唯一真实的远程部署路径：SDK 的 DNS rebinding 防护若保持默认，会以
+// 403 invalid Host header 拒掉所有 MCP 请求。
+func TestMCPThroughProxyHost(t *testing.T) {
+	ts, token := newTestServer(t)
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2025-06-18",
+			"capabilities":    map[string]any{},
+			"clientInfo":      map[string]any{"name": "test", "version": "0"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Host = "mem.example.com" // 反代传进来的 Host，不是 localhost
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode == http.StatusForbidden {
+		t.Fatalf("被 Host 校验拦掉: %s", raw)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, raw)
+	}
+}
+
+func TestMCPRequiresToken(t *testing.T) {
+	ts, _ := newTestServer(t)
+	resp, _ := do(t, ts, http.MethodPost, "/mcp", "", map[string]any{"jsonrpc": "2.0", "id": 1, "method": "initialize"})
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("无 token status = %d, want 401", resp.StatusCode)
+	}
+}
